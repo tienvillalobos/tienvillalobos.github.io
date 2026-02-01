@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
@@ -6,7 +7,8 @@ import JSZip from 'https://esm.sh/jszip@3.10.1';
  * Prompt Fighter - AI Arcade Edition
  */
 
-type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'FIGHT' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR';
+// Added 'STOP' to GameState union to fix TypeScript comparison error on line 191
+type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'FIGHT' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR' | 'STOP';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
@@ -26,11 +28,23 @@ const CHARACTERS = [
 // --- Audio Engine ---
 class SoundManager {
   private ctx: AudioContext | null = null;
-  private musicOsc: OscillatorNode | null = null;
+  private musicSource: AudioBufferSourceNode | null = null;
   private musicGain: GainNode | null = null;
+  private buffers: Record<string, AudioBuffer> = {};
+  private currentMusicMode: string | null = null;
 
   init() {
     if (!this.ctx) this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+
+  async loadBuffer(name: string, arrayBuffer: ArrayBuffer) {
+    this.init();
+    try {
+      const buffer = await this.ctx!.decodeAudioData(arrayBuffer);
+      this.buffers[name] = buffer;
+    } catch (e) {
+      console.error(`Error decoding audio: ${name}`, e);
+    }
   }
 
   playSFX(type: 'select' | 'hit' | 'start' | 'ko' | 'jump' | 'attack') {
@@ -78,32 +92,35 @@ class SoundManager {
   }
 
   playMusic(mode: 'menu' | 'fight' | 'stop') {
-    if (!this.ctx) return;
-    if (this.musicOsc) { try { this.musicOsc.stop(); } catch(e) {} this.musicOsc = null; }
+    if (this.currentMusicMode === mode) return;
+    this.currentMusicMode = mode;
+
+    if (!this.ctx) this.init();
+    
+    if (this.musicSource) {
+      try { this.musicSource.stop(); } catch(e) {}
+      this.musicSource = null;
+    }
+    
     if (mode === 'stop') return;
 
-    this.musicOsc = this.ctx.createOscillator();
-    this.musicGain = this.ctx.createGain();
-    this.musicOsc.type = mode === 'menu' ? 'triangle' : 'square';
-    this.musicOsc.connect(this.musicGain);
-    this.musicGain.connect(this.ctx.destination);
-    this.musicGain.gain.value = 0.03;
-    
-    const freq = mode === 'menu' ? 110 : 80;
-    this.musicOsc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-    
-    const intervalId = setInterval(() => {
-      if (this.musicOsc && this.ctx && this.musicOsc.context.state !== 'closed') {
-        const nextFreq = freq * (Math.random() > 0.5 ? 1.2 : 1);
-        try {
-          this.musicOsc.frequency.exponentialRampToValueAtTime(nextFreq, this.ctx.currentTime + 0.1);
-        } catch (e) {}
-      } else {
-        clearInterval(intervalId);
-      }
-    }, 250);
+    const buffer = this.buffers[mode];
+    if (!buffer) {
+      console.warn(`Buffer de música no encontrado para: ${mode}`);
+      return;
+    }
 
-    this.musicOsc.start();
+    this.musicSource = this.ctx!.createBufferSource();
+    this.musicSource.buffer = buffer;
+    this.musicSource.loop = true;
+
+    this.musicGain = this.ctx!.createGain();
+    // Bajamos sutilmente el volumen de fight (0.25) vs menu (0.4)
+    this.musicGain.gain.value = mode === 'fight' ? 0.25 : 0.4;
+    this.musicGain.connect(this.ctx!.destination);
+
+    this.musicSource.connect(this.musicGain);
+    this.musicSource.start();
   }
 }
 
@@ -151,6 +168,7 @@ const FighterApp = () => {
   const timer = useRef<number>(99);
   const frameCounter = useRef<number>(0);
   const inputCooldownRef = useRef<number>(0);
+  const screenShakeRef = useRef<number>(0);
 
   // Asset Refs
   const mugshots = useRef<Record<string, HTMLImageElement>>({});
@@ -167,12 +185,13 @@ const FighterApp = () => {
     gameStateRef.current = gameState;
     inputCooldownRef.current = 20;
 
-    if (gameState === 'TITLE' || gameState === 'CHARACTER_SELECT') {
-      if (oldState === 'BOOT' || oldState === 'INTRO' || oldState === 'GAME_OVER' || oldState === 'ROUND_RESULT') {
-        sounds.playMusic('menu');
-      }
-    } else if (gameState === 'FIGHT') {
+    // Actualizado: INTRO y TITLE (Home) usan fight.ogg
+    if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT') {
       sounds.playMusic('fight');
+    } else if (gameState === 'CHARACTER_SELECT') {
+      sounds.playMusic('menu');
+    } else if (gameState === 'STOP') {
+      sounds.playMusic('stop');
     }
   }, [gameState]);
 
@@ -193,6 +212,7 @@ const FighterApp = () => {
     roundRef.current = 1;
     winnerNameRef.current = null;
     frameCounter.current = 0;
+    screenShakeRef.current = 0;
   };
 
   const processZipData = async (data: Blob) => {
@@ -202,13 +222,14 @@ const FighterApp = () => {
       const zip = new JSZip();
       const content = await zip.loadAsync(data);
       const assets: Record<string, string> = {};
+      const audioBuffersRaw: Record<string, ArrayBuffer> = {};
       const filePromises: Promise<void>[] = [];
       
       content.forEach((relativePath, zipEntry) => {
-        if (!zipEntry.dir && (zipEntry.name.endsWith('.png') || zipEntry.name.endsWith('.jpg') || zipEntry.name.endsWith('.jpeg'))) {
+        const path = relativePath.toLowerCase();
+        if (!zipEntry.dir && (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg'))) {
           const promise = zipEntry.async('blob').then(blob => {
             const url = URL.createObjectURL(blob);
-            const path = relativePath.toLowerCase();
             const parts = path.split('/');
             
             if (path.includes('backgrounds/home')) assets['home_bg'] = url;
@@ -225,11 +246,19 @@ const FighterApp = () => {
             }
           });
           filePromises.push(promise);
+        } else if (!zipEntry.dir && path.endsWith('.ogg')) {
+          const promise = zipEntry.async('arraybuffer').then(ab => {
+            const parts = path.split('/');
+            const filename = parts[parts.length - 1];
+            const name = filename.split('.')[0];
+            audioBuffersRaw[name] = ab;
+          });
+          filePromises.push(promise);
         }
       });
 
       await Promise.all(filePromises);
-      await loadEngineAssets(assets);
+      await loadEngineAssets(assets, audioBuffersRaw);
     } catch (e) {
       console.error("Error procesando ZIP:", e);
       setErrorMessage("Error: assets.zip no es un archivo válido o está corrupto.");
@@ -256,7 +285,14 @@ const FighterApp = () => {
     if (gameState === 'BOOT') attemptAutoLoad();
   }, []);
 
-  const loadEngineAssets = async (assets: Record<string, string>) => {
+  const loadEngineAssets = async (assets: Record<string, string>, audioBuffersRaw: Record<string, ArrayBuffer>) => {
+    sounds.init();
+    
+    // Cargar sonidos primero
+    for (const [name, ab] of Object.entries(audioBuffersRaw)) {
+      await sounds.loadBuffer(name, ab);
+    }
+
     const totalFrames = 36;
     const categories = ['idle', 'walk', 'attack'];
     const playableChars = ['eric', 'david'];
@@ -308,6 +344,7 @@ const FighterApp = () => {
     };
     timer.current = 99;
     frameCounter.current = 0;
+    screenShakeRef.current = 0;
     sounds.playSFX('start');
   };
 
@@ -348,6 +385,7 @@ const FighterApp = () => {
         if (hitX < opp.x + opp.width - 60 && hitX + 50 > opp.x + 60 && f.y < opp.y + opp.height && f.y + 120 > opp.y) {
           if (opp.state !== 'HIT') { 
             opp.hp -= 10; opp.state = 'HIT'; opp.animFrame = 0; opp.velocityX = f.direction * 8; 
+            screenShakeRef.current = 10;
             sounds.playSFX('hit');
           }
         }
@@ -388,6 +426,16 @@ const FighterApp = () => {
     if (inputCooldownRef.current > 0) inputCooldownRef.current--;
 
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.save();
+    
+    // Aplicar Screen Shake
+    if (screenShakeRef.current > 0) {
+      const sx = (Math.random() - 0.5) * screenShakeRef.current;
+      const sy = (Math.random() - 0.5) * screenShakeRef.current;
+      ctx.translate(sx, sy);
+      screenShakeRef.current *= 0.9;
+      if (screenShakeRef.current < 0.5) screenShakeRef.current = 0;
+    }
 
     if (state === 'BOOT') {
       ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
@@ -406,7 +454,7 @@ const FighterApp = () => {
     } else if (state === 'INTRO') {
       ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
       ctx.fillStyle = '#fff'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("THE PROMPT TOURNAMENT BEGINS...".slice(0, Math.floor(frameCounter.current/3)), CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+      ctx.fillText("La Maxxa Velada comienza...".slice(0, Math.floor(frameCounter.current/3)), CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
       frameCounter.current++;
       if (frameCounter.current > 140) { setGameState('TITLE'); frameCounter.current = 0; }
     } else if (state === 'TITLE') {
@@ -428,7 +476,7 @@ const FighterApp = () => {
     } else if (state === 'CHARACTER_SELECT') {
       ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
       ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("CHOOSE YOUR MODEL", CANVAS_WIDTH/2, 60);
+      ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 60);
       
       const size = 90; const margin = 20; const gridX = (CANVAS_WIDTH - (4*size + 3*margin))/2;
       
@@ -558,7 +606,10 @@ const FighterApp = () => {
         setGameState('TITLE'); 
         resetMatchState(); 
       }
+    } else if (state === 'STOP') {
+      ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
     }
+    ctx.restore();
     gameLoopId.current = requestAnimationFrame(loop);
   };
 
