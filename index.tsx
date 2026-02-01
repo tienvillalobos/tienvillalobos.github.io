@@ -10,7 +10,7 @@ type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | '
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
-const GROUND_Y = 190; // Elevado según solicitud
+const GROUND_Y = 190;
 
 const CHARACTERS = [
   { id: 0, name: 'ERIC', color: '#EF4444', locked: false },
@@ -136,8 +136,9 @@ const FighterApp = () => {
   const [selectedChar, setSelectedChar] = useState<number>(0);
   const selectedCharRef = useRef<number>(0);
   const [cpuChar, setCpuChar] = useState<number>(1);
-  const cpuCharRef = useRef<number>(1); // Ref para asegurar consistencia de la CPU en el loop
+  const cpuCharRef = useRef<number>(1);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   // Core Game Refs
   const roundRef = useRef(1);
@@ -196,6 +197,7 @@ const FighterApp = () => {
 
   const processZipData = async (data: Blob) => {
     setGameState('LOADING');
+    setErrorMessage("");
     try {
       const zip = new JSZip();
       const content = await zip.loadAsync(data);
@@ -212,7 +214,6 @@ const FighterApp = () => {
             if (path.includes('backgrounds/home')) assets['home_bg'] = url;
             else if (path.includes('backgrounds/fight')) assets['fight_bg'] = url;
             else if (path.includes('characters/')) {
-              // Estructura: assets/characters/[name]/[category]/frame_xxx.png
               const charName = parts[2];
               if (path.includes('mugshot')) {
                 assets[`${charName}_mugshot`] = url;
@@ -231,6 +232,7 @@ const FighterApp = () => {
       await loadEngineAssets(assets);
     } catch (e) {
       console.error("Error procesando ZIP:", e);
+      setErrorMessage("Error: assets.zip no es un archivo válido o está corrupto.");
       setGameState('ERROR');
     }
   };
@@ -243,9 +245,11 @@ const FighterApp = () => {
           const blob = await response.blob();
           await processZipData(blob);
         } else {
-          setGameState('ERROR');
+          throw new Error("Local assets.zip not found (404)");
         }
-      } catch (err) {
+      } catch (err: any) {
+        console.error("Error cargando assets local:", err);
+        setErrorMessage("Error: No se encontró 'assets.zip' en el servidor.");
         setGameState('ERROR');
       }
     };
@@ -256,8 +260,6 @@ const FighterApp = () => {
     const totalFrames = 36;
     const categories = ['idle', 'walk', 'attack'];
     const playableChars = ['eric', 'david'];
-    
-    // Estimación total de assets para la barra de carga
     const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 2;
     let loadedCount = 0;
 
@@ -393,8 +395,10 @@ const FighterApp = () => {
       ctx.fillText("SYSTEM BOOTING...", CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
     } else if (state === 'ERROR') {
       ctx.fillStyle = '#111'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
-      ctx.fillStyle = '#f00'; ctx.font = '16px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("ASSETS ERROR: REVISA EL ZIP", CANVAS_WIDTH/2, 225);
+      ctx.fillStyle = '#f00'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
+      ctx.fillText("FATAL ASSET ERROR", CANVAS_WIDTH/2, 180);
+      ctx.font = '10px "Press Start 2P"'; ctx.fillStyle = '#888';
+      ctx.fillText(errorMessage || "CHECK ASSETS.ZIP FILE", CANVAS_WIDTH/2, 220);
     } else if (state === 'LOADING') {
       ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
       ctx.fillStyle = '#fff'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
@@ -450,7 +454,6 @@ const FighterApp = () => {
       ctx.fillStyle = currentChar.locked ? '#444' : currentChar.color;
       ctx.fillText(currentChar.locked ? "LOCKED" : currentChar.name, 200, 380);
       
-      // Manejo de entrada para selección
       frameCounter.current++;
       if (frameCounter.current > 10) {
         let changed = false;
@@ -467,12 +470,9 @@ const FighterApp = () => {
       
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         if (!currentChar.locked) {
-          // Lógica estricta de CPU: selecciona el otro personaje disponible
-          // Como solo hay 0 (Eric) y 1 (David), si eligen uno, la CPU es el otro.
           let cpu = (selectedCharRef.current === 0) ? 1 : 0;
-          
           setCpuChar(cpu);
-          cpuCharRef.current = cpu; // Actualizar ref inmediatamente para initFighters
+          cpuCharRef.current = cpu;
           resetMatchState(); 
           initFighters(selectedCharRef.current, cpu); 
           setGameState('FIGHT'); 
@@ -542,7 +542,6 @@ const FighterApp = () => {
         if (scoreRef.current.p1 >= 2 || scoreRef.current.p2 >= 2) setGameState('GAME_OVER');
         else { 
           roundRef.current++; 
-          // Asegurar que usamos cpuCharRef para que no cambie el personaje de la CPU entre rounds
           initFighters(selectedCharRef.current, cpuCharRef.current); 
           setGameState('FIGHT'); 
         }
