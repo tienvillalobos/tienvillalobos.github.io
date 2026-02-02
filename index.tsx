@@ -13,6 +13,7 @@ type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | '
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
 const GROUND_Y = 190;
+const MARGIN_X = 15; // Margen horizontal por lado: los personajes no pueden pasar de este borde
 const CHAR_SELECT_SLOTS = 8; // Slots visibles en el menú de selección (grid 4x2)
 
 const CHARACTERS = [
@@ -376,7 +377,7 @@ const FighterApp = () => {
     } else { f.velocityX = 0; }
 
     f.x += f.velocityX; f.y += f.velocityY;
-    if (f.x < 0) f.x = 0; if (f.x > CANVAS_WIDTH - f.width) f.x = CANVAS_WIDTH - f.width;
+    if (f.x < MARGIN_X) f.x = MARGIN_X; if (f.x > CANVAS_WIDTH - MARGIN_X - f.width) f.x = CANVAS_WIDTH - MARGIN_X - f.width;
     f.animTimer++;
     if (f.animTimer >= (f.state === 'ATTACK' ? 1 : 2)) { f.animFrame++; f.animTimer = 0; }
 
