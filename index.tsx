@@ -17,12 +17,13 @@ const GROUND_Y = 190;
 const CHARACTERS = [
   { id: 0, name: 'ERIC', color: '#EF4444', locked: false },
   { id: 1, name: 'DAVID', color: '#4285F4', locked: false },
-  { id: 2, name: 'CLAUDE', color: '#D97757', locked: true },
-  { id: 3, name: 'GPT-4', color: '#10A37F', locked: true },
-  { id: 4, name: 'LLAMA', color: '#0668E1', locked: true },
-  { id: 5, name: 'MISTRAL', color: '#FCD34D', locked: true },
-  { id: 6, name: 'GROK', color: '#FFFFFF', locked: true },
-  { id: 7, name: 'DEEPSEEK', color: '#6366F1', locked: true },
+  { id: 2, name: 'JOSTIN', color: '#22C55E', locked: false },
+  { id: 3, name: 'CLAUDE', color: '#D97757', locked: true },
+  { id: 4, name: 'GPT-4', color: '#10A37F', locked: true },
+  { id: 5, name: 'LLAMA', color: '#0668E1', locked: true },
+  { id: 6, name: 'MISTRAL', color: '#FCD34D', locked: true },
+  { id: 7, name: 'GROK', color: '#FFFFFF', locked: true },
+  { id: 8, name: 'DEEPSEEK', color: '#6366F1', locked: true },
 ];
 
 // --- Audio Engine ---
@@ -295,7 +296,7 @@ const FighterApp = () => {
 
     const totalFrames = 36;
     const categories = ['idle', 'walk', 'attack'];
-    const playableChars = ['eric', 'david'];
+    const playableChars = ['eric', 'david', 'jostin'];
     const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 2;
     let loadedCount = 0;
 
