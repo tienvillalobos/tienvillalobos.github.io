@@ -13,6 +13,7 @@ type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | '
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
 const GROUND_Y = 190;
+const CHAR_SELECT_SLOTS = 8; // Slots visibles en el menú de selección (grid 4x2)
 
 const CHARACTERS = [
   { id: 0, name: 'ERIC', color: '#EF4444', locked: false },
@@ -480,8 +481,10 @@ const FighterApp = () => {
       ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 60);
       
       const size = 90; const margin = 20; const gridX = (CANVAS_WIDTH - (4*size + 3*margin))/2;
+      const charsInSelect = CHARACTERS.slice(0, CHAR_SELECT_SLOTS);
+      const selectedIdx = Math.min(selectedCharRef.current, CHAR_SELECT_SLOTS - 1);
       
-      CHARACTERS.forEach((c, i) => {
+      charsInSelect.forEach((c, i) => {
         const x = gridX + (i % 4) * (size + margin); const y = 110 + Math.floor(i / 4) * (size + margin);
         ctx.fillStyle = c.locked ? '#050a14' : '#172a45'; 
         ctx.fillRect(x, y, size, size);
@@ -494,11 +497,11 @@ const FighterApp = () => {
           ctx.fillText("?", x + size/2, y + size/2 + 10);
         }
         
-        ctx.strokeStyle = i === selectedCharRef.current ? '#f00' : '#444'; 
-        ctx.lineWidth = i === selectedCharRef.current ? 6 : 2; ctx.strokeRect(x,y,size,size);
+        ctx.strokeStyle = i === selectedIdx ? '#f00' : '#444'; 
+        ctx.lineWidth = i === selectedIdx ? 6 : 2; ctx.strokeRect(x,y,size,size);
       });
       
-      const currentChar = CHARACTERS[selectedCharRef.current];
+      const currentChar = CHARACTERS[selectedIdx];
       ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"'; 
       ctx.fillStyle = currentChar.locked ? '#444' : currentChar.color;
       ctx.fillText(currentChar.locked ? "LOCKED" : currentChar.name, 200, 380);
@@ -506,10 +509,10 @@ const FighterApp = () => {
       frameCounter.current++;
       if (frameCounter.current > 10) {
         let changed = false;
-        if (keys.current['ArrowRight']) { setSelectedChar(p => (p + 1) % 8); changed = true; }
-        else if (keys.current['ArrowLeft']) { setSelectedChar(p => (p - 1 + 8) % 8); changed = true; }
-        else if (keys.current['ArrowDown']) { setSelectedChar(p => (p + 4) % 8); changed = true; }
-        else if (keys.current['ArrowUp']) { setSelectedChar(p => (p - 4 + 8) % 8); changed = true; }
+        if (keys.current['ArrowRight']) { setSelectedChar(p => (p + 1) % CHAR_SELECT_SLOTS); changed = true; }
+        else if (keys.current['ArrowLeft']) { setSelectedChar(p => (p - 1 + CHAR_SELECT_SLOTS) % CHAR_SELECT_SLOTS); changed = true; }
+        else if (keys.current['ArrowDown']) { setSelectedChar(p => (p + 4) % CHAR_SELECT_SLOTS); changed = true; }
+        else if (keys.current['ArrowUp']) { setSelectedChar(p => (p - 4 + CHAR_SELECT_SLOTS) % CHAR_SELECT_SLOTS); changed = true; }
         
         if (changed) {
           frameCounter.current = 0;
@@ -519,11 +522,11 @@ const FighterApp = () => {
       
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         if (!currentChar.locked) {
-          let cpu = (selectedCharRef.current === 0) ? 1 : 0;
+          let cpu = (selectedIdx === 0) ? 1 : 0;
           setCpuChar(cpu);
           cpuCharRef.current = cpu;
           resetMatchState(); 
-          initFighters(selectedCharRef.current, cpu); 
+          initFighters(selectedIdx, cpu); 
           setGameState('FIGHT'); 
         }
       }
