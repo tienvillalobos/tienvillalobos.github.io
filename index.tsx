@@ -524,7 +524,11 @@ const FighterApp = () => {
       
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         if (!currentChar.locked) {
-          let cpu = (selectedIdx === 0) ? 1 : 0;
+          // CPU elige al azar entre los personajes jugables (no bloqueados) que no eligió el usuario
+          const candidates = charsInSelect
+            .map((_, i) => i)
+            .filter(i => i !== selectedIdx && !CHARACTERS[i].locked);
+          const cpu = candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
           setCpuChar(cpu);
           cpuCharRef.current = cpu;
           resetMatchState(); 
