@@ -15,6 +15,10 @@ const CANVAS_HEIGHT = 450;
 const GROUND_Y = 190;
 const MARGIN_X = 15; // Margen horizontal por lado: los personajes no pueden pasar de este borde
 const CHAR_SELECT_SLOTS = 8; // Slots visibles en el menú de selección (grid 4x2)
+// Stamina: no se puede golpear infinito; cada golpe gasta, se regenera con el tiempo
+const STAMINA_MAX = 100;
+const STAMINA_COST = 28; // Coste por ataque
+const STAMINA_REGEN = 0.35; // Por frame (regeneración continua)
 
 const CHARACTERS = [
   { id: 0, name: 'ERIC', color: '#EF4444', locked: false },
@@ -144,7 +148,8 @@ interface Fighter {
   velocityX: number;
   velocityY: number;
   isAttacking: boolean;
-  attackCooldown: number;
+  stamina: number;
+  maxStamina: number;
   color: string;
   name: string;
   charId: number;
@@ -337,13 +342,13 @@ const FighterApp = () => {
     playerRef.current = {
       x: 100, y: GROUND_Y, width: 220, height: 220, hp: 100, maxHp: 100,
       direction: 1, state: 'IDLE', animFrame: 0, animTimer: 0,
-      velocityX: 0, velocityY: 0, isAttacking: false, attackCooldown: 0,
+      velocityX: 0, velocityY: 0, isAttacking: false, stamina: STAMINA_MAX, maxStamina: STAMINA_MAX,
       color: CHARACTERS[pIdx].color, name: CHARACTERS[pIdx].name, charId: pIdx
     };
     cpuRef.current = {
       x: 480, y: GROUND_Y, width: 220, height: 220, hp: 100, maxHp: 100,
       direction: -1, state: 'IDLE', animFrame: 0, animTimer: 0,
-      velocityX: 0, velocityY: 0, isAttacking: false, attackCooldown: 0,
+      velocityX: 0, velocityY: 0, isAttacking: false, stamina: STAMINA_MAX, maxStamina: STAMINA_MAX,
       color: CHARACTERS[cIdx].color, name: CHARACTERS[cIdx].name, charId: cIdx
     };
     timer.current = 99;
@@ -364,8 +369,9 @@ const FighterApp = () => {
         else if (keys.current['KeyD'] || keys.current['ArrowRight']) { f.velocityX = 4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
         else { f.velocityX = 0; if (f.y === GROUND_Y) f.state = 'IDLE'; }
         if ((keys.current['KeyW'] || keys.current['ArrowUp']) && f.y === GROUND_Y) f.velocityY = -15;
-        if ((keys.current['Space'] || keys.current['KeyK']) && f.attackCooldown <= 0) {
-          f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0; f.attackCooldown = 40;
+        if ((keys.current['Space'] || keys.current['KeyK']) && f.stamina >= STAMINA_COST) {
+          f.stamina -= STAMINA_COST;
+          f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0;
           sounds.playSFX('attack');
         }
       }
@@ -373,7 +379,7 @@ const FighterApp = () => {
       const dist = Math.abs(f.x - opp.x);
       if (!f.isAttacking && f.state !== 'HIT') {
         if (dist > 180) { f.velocityX = f.x < opp.x ? 2.5 : -2.5; f.direction = f.x < opp.x ? 1 : -1; f.state = 'WALK'; }
-        else { f.velocityX = 0; f.state = 'IDLE'; if (Math.random() < 0.05 && f.attackCooldown <= 0) { f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0; f.attackCooldown = 40; sounds.playSFX('attack'); } }
+        else { f.velocityX = 0; f.state = 'IDLE'; if (Math.random() < 0.05 && f.stamina >= STAMINA_COST) { f.stamina -= STAMINA_COST; f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0; sounds.playSFX('attack'); } }
       }
     } else { f.velocityX = 0; }
 
@@ -396,7 +402,10 @@ const FighterApp = () => {
       }
     } else if (f.state === 'HIT') { if (f.animFrame >= 15) { f.state = 'IDLE'; f.animFrame = 0; f.velocityX = 0; } } 
     else { if (f.animFrame >= 36) f.animFrame = 0; }
-    if (f.attackCooldown > 0) f.attackCooldown--;
+    // Regenerar stamina (no mientras ataca)
+    if (!f.isAttacking && f.stamina < f.maxStamina) {
+      f.stamina = Math.min(f.maxStamina, f.stamina + STAMINA_REGEN);
+    }
   };
 
   const drawFighter = (ctx: CanvasRenderingContext2D, f: Fighter) => {
@@ -550,32 +559,33 @@ const FighterApp = () => {
         ctx.fillStyle = '#fff'; ctx.font = '34px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText(timer.current.toString(), CANVAS_WIDTH/2, 65);
         
         const drawBar = (f: Fighter, x: number, align: 'L'|'R', wins: number) => {
-          const w = 340; const barH = 30;
-          ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeRect(x - 2, 40 - 2, w + 4, barH + 4);
-          ctx.fillStyle = '#000'; ctx.fillRect(x, 40, w, barH);
-          const hpW = (f.hp / f.maxHp) * w; 
+          const w = 280; const barH = 14; const gap = 4; const stamY = 40 + barH + gap;
+          const totalH = barH * 2 + gap;
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x - 2, 40 - 2, w + 4, totalH + 4);
+          ctx.fillStyle = '#000'; ctx.fillRect(x, 40, w, barH); ctx.fillRect(x, stamY, w, barH);
+          const hpW = (f.hp / f.maxHp) * w; const stamW = (f.stamina / f.maxStamina) * w;
           ctx.fillStyle = f.hp > 30 ? '#00FF00' : '#FF0000';
           if (align === 'L') { 
             ctx.fillRect(x, 40, hpW, barH); 
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '18px "Press Start 2P"';
-            ctx.shadowColor = '#000'; ctx.shadowBlur = 6; ctx.fillText(f.name, x, 30);
-            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#4a9eff'; ctx.fillRect(x, stamY, stamW, barH);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '14px "Press Start 2P"';
+            ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillText(f.name, x, 34); ctx.shadowBlur = 0;
             for(let i=0; i<2; i++) {
               ctx.fillStyle = wins > i ? '#ffd700' : '#333';
-              ctx.beginPath(); ctx.arc(x + w - 15 - (i*30), 20, 10, 0, Math.PI*2); ctx.fill();
+              ctx.beginPath(); ctx.arc(x + w - 15 - (i*30), 26, 10, 0, Math.PI*2); ctx.fill();
             }
           } else { 
             ctx.fillRect(x + (w - hpW), 40, hpW, barH); 
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.font = '18px "Press Start 2P"';
-            ctx.shadowColor = '#000'; ctx.shadowBlur = 6; ctx.fillText(f.name, x + w, 30);
-            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#4a9eff'; ctx.fillRect(x + (w - stamW), stamY, stamW, barH);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.font = '14px "Press Start 2P"';
+            ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillText(f.name, x + w, 34); ctx.shadowBlur = 0;
             for(let i=0; i<2; i++) {
               ctx.fillStyle = wins > i ? '#ffd700' : '#333';
-              ctx.beginPath(); ctx.arc(x + 15 + (i*30), 20, 10, 0, Math.PI*2); ctx.fill();
+              ctx.beginPath(); ctx.arc(x + 15 + (i*30), 26, 10, 0, Math.PI*2); ctx.fill();
             }
           }
         };
-        drawBar(playerRef.current, 20, 'L', scoreRef.current.p1); drawBar(cpuRef.current, 440, 'R', scoreRef.current.p2);
+        drawBar(playerRef.current, 20, 'L', scoreRef.current.p1); drawBar(cpuRef.current, 500, 'R', scoreRef.current.p2);
 
         if (frameCounter.current < 120) {
             ctx.save(); ctx.fillStyle = '#ffd700'; ctx.font = '50px "Press Start 2P"'; ctx.textAlign = 'center';
