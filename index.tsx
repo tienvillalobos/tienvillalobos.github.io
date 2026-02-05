@@ -8,7 +8,7 @@ import JSZip from 'https://esm.sh/jszip@3.10.1';
  */
 
 // Added 'STOP' to GameState union to fix TypeScript comparison error on line 191
-type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'FIGHT' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR' | 'STOP';
+type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'FIGHT' | 'ROUND_KO' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR' | 'STOP';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
@@ -99,6 +99,16 @@ class SoundManager {
     }
   }
 
+  playBuffer(name: string) {
+    if (!this.ctx) return;
+    const buffer = this.buffers[name];
+    if (!buffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.ctx.destination);
+    src.start();
+  }
+
   playMusic(mode: 'menu' | 'fight' | 'stop') {
     if (this.currentMusicMode === mode) return;
     this.currentMusicMode = mode;
@@ -170,6 +180,7 @@ const FighterApp = () => {
   const roundRef = useRef(1);
   const scoreRef = useRef({ p1: 0, p2: 0 });
   const winnerNameRef = useRef<string | null>(null);
+  const roundLoserRef = useRef<Fighter | null>(null);
   const playerRef = useRef<Fighter | null>(null);
   const cpuRef = useRef<Fighter | null>(null);
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -195,7 +206,7 @@ const FighterApp = () => {
     inputCooldownRef.current = 20;
 
     // Actualizado: INTRO y TITLE (Home) usan fight.ogg
-    if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT') {
+    if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
       sounds.playMusic('fight');
     } else if (gameState === 'CHARACTER_SELECT') {
       sounds.playMusic('menu');
@@ -430,6 +441,22 @@ const FighterApp = () => {
     ctx.restore();
   };
 
+  const drawFighterFallen = (ctx: CanvasRenderingContext2D, f: Fighter) => {
+    const charName = f.name.toLowerCase();
+    const charAnims = anims.current[charName];
+    if (!charAnims) return;
+    const frames = charAnims.idle;
+    const img = frames[f.animFrame % frames.length];
+    if (!isValid(img)) return;
+    ctx.save();
+    const cx = f.x + f.width / 2;
+    const cy = f.y + f.height / 2;
+    ctx.translate(cx, cy);
+    ctx.rotate(-f.direction * (Math.PI / 2));
+    ctx.drawImage(img, -f.width/2, -f.height/2, f.width, f.height);
+    ctx.restore();
+  };
+
   const loop = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -597,9 +624,27 @@ const FighterApp = () => {
         if (playerRef.current.hp <= 0 || cpuRef.current.hp <= 0 || timer.current <= 0) {
           const p1Won = playerRef.current.hp > cpuRef.current.hp;
           winnerNameRef.current = p1Won ? playerRef.current.name : cpuRef.current.name;
+          roundLoserRef.current = p1Won ? cpuRef.current : playerRef.current;
           if (p1Won) scoreRef.current.p1++; else scoreRef.current.p2++;
-          setGameState('ROUND_RESULT'); frameCounter.current = 0;
+          setGameState('ROUND_KO'); frameCounter.current = 0;
         }
+      }
+    } else if (state === 'ROUND_KO') {
+      if (isValid(fightBackground.current)) ctx.drawImage(fightBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      else { ctx.fillStyle = '#111'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
+      const loser = roundLoserRef.current;
+      const winner = playerRef.current && cpuRef.current && loser === playerRef.current ? cpuRef.current : playerRef.current;
+      if (winner) drawFighter(ctx, winner);
+      if (loser) drawFighterFallen(ctx, loser);
+      ctx.fillStyle = '#ffd700'; ctx.font = '50px "Press Start 2P"'; ctx.textAlign = 'center';
+      ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
+      ctx.fillText("K.O.", CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+      ctx.shadowBlur = 0;
+      if (frameCounter.current === 0) sounds.playBuffer('ko');
+      frameCounter.current++;
+      const koDelayFrames = 120;
+      if (frameCounter.current > koDelayFrames) {
+        setGameState('ROUND_RESULT'); frameCounter.current = 0;
       }
     } else if (state === 'ROUND_RESULT') {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
