@@ -636,6 +636,37 @@ const FighterApp = () => {
       const winner = playerRef.current && cpuRef.current && loser === playerRef.current ? cpuRef.current : playerRef.current;
       if (winner) drawFighter(ctx, winner);
       if (loser) drawFighterFallen(ctx, loser);
+      ctx.fillStyle = '#fff'; ctx.font = '34px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText(timer.current.toString(), CANVAS_WIDTH/2, 65);
+      const drawBar = (f: Fighter, x: number, align: 'L'|'R', wins: number) => {
+        const w = 280; const barH = 14; const gap = 4; const stamY = 40 + barH + gap;
+        const totalH = barH * 2 + gap;
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x - 2, 40 - 2, w + 4, totalH + 4);
+        ctx.fillStyle = '#000'; ctx.fillRect(x, 40, w, barH); ctx.fillRect(x, stamY, w, barH);
+        const hpW = (f.hp / f.maxHp) * w; const stamW = (f.stamina / f.maxStamina) * w;
+        ctx.fillStyle = f.hp > 30 ? '#00FF00' : '#FF0000';
+        if (align === 'L') {
+          ctx.fillRect(x, 40, hpW, barH);
+          ctx.fillStyle = '#4a9eff'; ctx.fillRect(x, stamY, stamW, barH);
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '14px "Press Start 2P"';
+          ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillText(f.name, x, 34); ctx.shadowBlur = 0;
+          for(let i=0; i<2; i++) {
+            ctx.fillStyle = wins > i ? '#ffd700' : '#333';
+            ctx.beginPath(); ctx.arc(x + w - 15 - (i*30), 26, 10, 0, Math.PI*2); ctx.fill();
+          }
+        } else {
+          ctx.fillRect(x + (w - hpW), 40, hpW, barH);
+          ctx.fillStyle = '#4a9eff'; ctx.fillRect(x + (w - stamW), stamY, stamW, barH);
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.font = '14px "Press Start 2P"';
+          ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillText(f.name, x + w, 34); ctx.shadowBlur = 0;
+          for(let i=0; i<2; i++) {
+            ctx.fillStyle = wins > i ? '#ffd700' : '#333';
+            ctx.beginPath(); ctx.arc(x + 15 + (i*30), 26, 10, 0, Math.PI*2); ctx.fill();
+          }
+        }
+      };
+      if (playerRef.current && cpuRef.current) {
+        drawBar(playerRef.current, 20, 'L', scoreRef.current.p1); drawBar(cpuRef.current, 500, 'R', scoreRef.current.p2);
+      }
       ctx.fillStyle = '#ffd700'; ctx.font = '50px "Press Start 2P"'; ctx.textAlign = 'center';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
       ctx.fillText("K.O.", CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
