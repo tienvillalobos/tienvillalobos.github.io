@@ -175,6 +175,8 @@ const FighterApp = () => {
   const cpuCharRef = useRef<number>(1);
   const [loadProgress, setLoadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [fightPaused, setFightPaused] = useState(false);
+  const fightPausedRef = useRef(false);
 
   // Core Game Refs
   const roundRef = useRef(1);
@@ -194,6 +196,7 @@ const FighterApp = () => {
   const mugshots = useRef<Record<string, HTMLImageElement>>({});
   const homeBackground = useRef<HTMLImageElement | null>(null);
   const fightBackground = useRef<HTMLImageElement | null>(null);
+  const menuBackground = useRef<HTMLImageElement | null>(null);
   const anims = useRef<Record<string, {
     idle: HTMLImageElement[];
     walk: HTMLImageElement[];
@@ -204,6 +207,7 @@ const FighterApp = () => {
     const oldState = gameStateRef.current;
     gameStateRef.current = gameState;
     inputCooldownRef.current = 20;
+    if (gameState !== 'FIGHT') setFightPaused(false);
 
     // Actualizado: INTRO y TITLE (Home) usan fight.ogg
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
@@ -222,6 +226,10 @@ const FighterApp = () => {
   useEffect(() => {
     cpuCharRef.current = cpuChar;
   }, [cpuChar]);
+
+  useEffect(() => {
+    fightPausedRef.current = fightPaused;
+  }, [fightPaused]);
 
   const isValid = (img: HTMLImageElement | null): img is HTMLImageElement => {
     return !!(img && img.complete && img.naturalWidth > 0);
@@ -254,6 +262,7 @@ const FighterApp = () => {
             
             if (path.includes('backgrounds/home')) assets['home_bg'] = url;
             else if (path.includes('backgrounds/fight')) assets['fight_bg'] = url;
+            else if (path.includes('backgrounds/menu')) assets['menu_bg'] = url;
             else if (path.includes('characters/')) {
               const charName = parts[2];
               if (path.includes('mugshot')) {
@@ -316,7 +325,7 @@ const FighterApp = () => {
     const totalFrames = 36;
     const categories = ['idle', 'walk', 'attack'];
     const playableChars = ['eric', 'david', 'jostin', 'manu'];
-    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 2;
+    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 3;
     let loadedCount = 0;
 
     const getImg = (key: string): Promise<HTMLImageElement> => {
@@ -331,7 +340,8 @@ const FighterApp = () => {
 
     homeBackground.current = await getImg('home_bg');
     fightBackground.current = await getImg('fight_bg');
-    
+    menuBackground.current = await getImg('menu_bg');
+
     for (const charName of playableChars) {
       mugshots.current[charName] = await getImg(`${charName}_mugshot`);
       anims.current[charName] = { idle: [], walk: [], attack: [] };
@@ -514,13 +524,15 @@ const FighterApp = () => {
         setGameState('CHARACTER_SELECT'); 
       }
     } else if (state === 'CHARACTER_SELECT') {
-      ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
+      if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
       ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
       ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 60);
       
       const size = 90; const margin = 20; const gridX = (CANVAS_WIDTH - (4*size + 3*margin))/2;
       const charsInSelect = CHARACTERS.slice(0, CHAR_SELECT_SLOTS);
       const selectedIdx = Math.min(selectedCharRef.current, CHAR_SELECT_SLOTS - 1);
+      const mugPad = 5; const mugSize = size - mugPad * 2;
       
       charsInSelect.forEach((c, i) => {
         const x = gridX + (i % 4) * (size + margin); const y = 110 + Math.floor(i / 4) * (size + margin);
@@ -529,13 +541,23 @@ const FighterApp = () => {
         
         if (!c.locked) {
           const mug = mugshots.current[c.name.toLowerCase()];
-          if (isValid(mug)) ctx.drawImage(mug, x+5, y+5, size-10, size-10);
+          const mx = x + mugPad; const my = y + mugPad;
+          ctx.fillStyle = '#f0f0f0';
+          ctx.fillRect(mx, my, mugSize, mugSize);
+          if (isValid(mug)) {
+            ctx.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 4;
+            ctx.shadowOffsetY = 4;
+            ctx.drawImage(mug, mx, my, mugSize, mugSize);
+            ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+          }
         } else {
           ctx.fillStyle = '#444'; ctx.font = '30px "Press Start 2P"'; ctx.textAlign = 'center';
           ctx.fillText("?", x + size/2, y + size/2 + 10);
         }
         
-        ctx.strokeStyle = i === selectedIdx ? '#f00' : '#444'; 
+        ctx.strokeStyle = i === selectedIdx ? '#f00' : (c.locked ? '#444' : '#ffd700'); 
         ctx.lineWidth = i === selectedIdx ? 6 : 2; ctx.strokeRect(x,y,size,size);
       });
       
@@ -577,14 +599,20 @@ const FighterApp = () => {
       else { ctx.fillStyle = '#111'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
 
       if (playerRef.current && cpuRef.current) {
-        updateCombat(playerRef.current, cpuRef.current, false); updateCombat(cpuRef.current, playerRef.current, true);
+        if (!fightPausedRef.current) {
+          updateCombat(playerRef.current, cpuRef.current, false); updateCombat(cpuRef.current, playerRef.current, true);
+          if (frameCounter.current % 60 === 0 && timer.current > 0 && frameCounter.current >= 120) timer.current--;
+          frameCounter.current++;
+          if (playerRef.current.hp <= 0 || cpuRef.current.hp <= 0 || timer.current <= 0) {
+            const p1Won = playerRef.current.hp > cpuRef.current.hp;
+            winnerNameRef.current = p1Won ? playerRef.current.name : cpuRef.current.name;
+            roundLoserRef.current = p1Won ? cpuRef.current : playerRef.current;
+            if (p1Won) scoreRef.current.p1++; else scoreRef.current.p2++;
+            setGameState('ROUND_KO'); frameCounter.current = 0;
+          }
+        }
         drawFighter(ctx, playerRef.current); drawFighter(ctx, cpuRef.current);
-        
-        if (frameCounter.current % 60 === 0 && timer.current > 0 && frameCounter.current >= 120) timer.current--;
-        frameCounter.current++;
-        
         ctx.fillStyle = '#fff'; ctx.font = '34px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText(timer.current.toString(), CANVAS_WIDTH/2, 65);
-        
         const drawBar = (f: Fighter, x: number, align: 'L'|'R', wins: number) => {
           const w = 280; const barH = 14; const gap = 4; const stamY = 40 + barH + gap;
           const totalH = barH * 2 + gap;
@@ -613,20 +641,11 @@ const FighterApp = () => {
           }
         };
         drawBar(playerRef.current, 20, 'L', scoreRef.current.p1); drawBar(cpuRef.current, 500, 'R', scoreRef.current.p2);
-
-        if (frameCounter.current < 120) {
+        if (frameCounter.current < 120 && !fightPausedRef.current) {
             ctx.save(); ctx.fillStyle = '#ffd700'; ctx.font = '50px "Press Start 2P"'; ctx.textAlign = 'center';
             ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
             const msg = frameCounter.current < 60 ? `ROUND ${roundRef.current}` : "FIGHT!";
             ctx.fillText(msg, CANVAS_WIDTH/2, CANVAS_HEIGHT/2); ctx.restore();
-        }
-
-        if (playerRef.current.hp <= 0 || cpuRef.current.hp <= 0 || timer.current <= 0) {
-          const p1Won = playerRef.current.hp > cpuRef.current.hp;
-          winnerNameRef.current = p1Won ? playerRef.current.name : cpuRef.current.name;
-          roundLoserRef.current = p1Won ? cpuRef.current : playerRef.current;
-          if (p1Won) scoreRef.current.p1++; else scoreRef.current.p2++;
-          setGameState('ROUND_KO'); frameCounter.current = 0;
         }
       }
     } else if (state === 'ROUND_KO') {
@@ -726,6 +745,57 @@ const FighterApp = () => {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' }}>
       <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
+      {gameState === 'FIGHT' && !fightPaused && (
+        <button
+          type="button"
+          onClick={() => setFightPaused(true)}
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '10px', padding: '6px 10px',
+            background: 'rgba(0,0,0,0.7)', color: '#fff', border: '2px solid #fff',
+            cursor: 'pointer', textTransform: 'uppercase',
+          }}
+        >
+          II Pausa
+        </button>
+      )}
+      {gameState === 'FIGHT' && fightPaused && (
+        <div
+          style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 24,
+          }}
+        >
+          <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 24, color: '#ffd700' }}>PAUSA</span>
+          <button
+            type="button"
+            onClick={() => setFightPaused(false)}
+            style={{
+              fontFamily: '"Press Start 2P", cursive',
+              fontSize: '12px', padding: '12px 20px',
+              background: '#172a45', color: '#fff', border: '3px solid #fff',
+              cursor: 'pointer', textTransform: 'uppercase',
+            }}
+          >
+            Resumen
+          </button>
+          <button
+            type="button"
+            onClick={() => { setFightPaused(false); setGameState('CHARACTER_SELECT'); }}
+            style={{
+              fontFamily: '"Press Start 2P", cursive',
+              fontSize: '10px', padding: '12px 16px',
+              background: '#172a45', color: '#fff', border: '3px solid #fff',
+              cursor: 'pointer', textTransform: 'uppercase',
+            }}
+          >
+            Volver al menu de personajes
+          </button>
+        </div>
+      )}
     </div>
   );
 };
