@@ -8,13 +8,23 @@ import JSZip from 'https://esm.sh/jszip@3.10.1';
  */
 
 // Added 'STOP' to GameState union to fix TypeScript comparison error on line 191
-type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'FIGHT' | 'ROUND_KO' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR' | 'STOP';
+type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'STAGE_SELECT' | 'FIGHT' | 'ROUND_KO' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR' | 'STOP';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
 const GROUND_Y = 190;
 const MARGIN_X = 15; // Margen horizontal por lado: los personajes no pueden pasar de este borde
 const CHAR_SELECT_SLOTS = 8; // Slots visibles en el menú de selección (grid 4x2)
+
+const STAGES = [
+  { id: 0, name: 'ARENA', assetKey: 'arena', locked: false },
+  { id: 1, name: 'COFFEE ROOM', assetKey: 'coffee_room', locked: false },
+  { id: 2, name: '???', locked: true },
+  { id: 3, name: '???', locked: true },
+  { id: 4, name: '???', locked: true },
+  { id: 5, name: '???', locked: true },
+];
+
 // Stamina: no se puede golpear infinito; cada golpe gasta, se regenera con el tiempo
 const STAMINA_MAX = 100;
 const STAMINA_COST = 28; // Coste por ataque
@@ -177,6 +187,8 @@ const FighterApp = () => {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [fightPaused, setFightPaused] = useState(false);
   const fightPausedRef = useRef(false);
+  const [selectedStage, setSelectedStage] = useState(0);
+  const selectedStageRef = useRef(0);
 
   // Core Game Refs
   const roundRef = useRef(1);
@@ -197,6 +209,7 @@ const FighterApp = () => {
   const homeBackground = useRef<HTMLImageElement | null>(null);
   const fightBackground = useRef<HTMLImageElement | null>(null);
   const menuBackground = useRef<HTMLImageElement | null>(null);
+  const stageBackgrounds = useRef<(HTMLImageElement | null)[]>([]);
   const anims = useRef<Record<string, {
     idle: HTMLImageElement[];
     walk: HTMLImageElement[];
@@ -212,7 +225,7 @@ const FighterApp = () => {
     // Actualizado: INTRO y TITLE (Home) usan fight.ogg
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
       sounds.playMusic('fight');
-    } else if (gameState === 'CHARACTER_SELECT') {
+    } else if (gameState === 'CHARACTER_SELECT' || gameState === 'STAGE_SELECT') {
       sounds.playMusic('menu');
     } else if (gameState === 'STOP') {
       sounds.playMusic('stop');
@@ -230,6 +243,10 @@ const FighterApp = () => {
   useEffect(() => {
     fightPausedRef.current = fightPaused;
   }, [fightPaused]);
+
+  useEffect(() => {
+    selectedStageRef.current = selectedStage;
+  }, [selectedStage]);
 
   const isValid = (img: HTMLImageElement | null): img is HTMLImageElement => {
     return !!(img && img.complete && img.naturalWidth > 0);
@@ -261,8 +278,11 @@ const FighterApp = () => {
             const parts = path.split('/');
             
             if (path.includes('backgrounds/home')) assets['home_bg'] = url;
-            else if (path.includes('backgrounds/fight')) assets['fight_bg'] = url;
             else if (path.includes('backgrounds/menu')) assets['menu_bg'] = url;
+            else if (path.includes('stages/')) {
+              const name = parts[parts.length - 1].replace(/\.(png|jpg|jpeg)$/i, '');
+              assets[`stage_${name}`] = url;
+            }
             else if (path.includes('characters/')) {
               const charName = parts[2];
               if (path.includes('mugshot')) {
@@ -325,7 +345,7 @@ const FighterApp = () => {
     const totalFrames = 36;
     const categories = ['idle', 'walk', 'attack'];
     const playableChars = ['eric', 'david', 'jostin', 'manu'];
-    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 3;
+    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 4;
     let loadedCount = 0;
 
     const getImg = (key: string): Promise<HTMLImageElement> => {
@@ -339,8 +359,12 @@ const FighterApp = () => {
     };
 
     homeBackground.current = await getImg('home_bg');
-    fightBackground.current = await getImg('fight_bg');
     menuBackground.current = await getImg('menu_bg');
+    stageBackgrounds.current = [
+      await getImg('stage_arena'),
+      await getImg('stage_coffee_room'),
+      null, null, null, null,
+    ];
 
     for (const charName of playableChars) {
       mugshots.current[charName] = await getImg(`${charName}_mugshot`);
@@ -582,16 +606,60 @@ const FighterApp = () => {
       
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         if (!currentChar.locked) {
-          // CPU elige al azar entre los personajes jugables (no bloqueados) que no eligió el usuario
           const candidates = charsInSelect
             .map((_, i) => i)
             .filter(i => i !== selectedIdx && !CHARACTERS[i].locked);
           const cpu = candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
           setCpuChar(cpu);
           cpuCharRef.current = cpu;
-          resetMatchState(); 
-          initFighters(selectedIdx, cpu); 
-          setGameState('FIGHT'); 
+          resetMatchState();
+          setGameState('STAGE_SELECT');
+        }
+      }
+    } else if (state === 'STAGE_SELECT') {
+      if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
+      ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
+      ctx.fillText("SELECT STAGE", CANVAS_WIDTH/2, 55);
+      const size = 120; const margin = 24; const cols = 3;
+      const gridW = cols * size + (cols - 1) * margin;
+      const gridX = (CANVAS_WIDTH - gridW) / 2;
+      const gridTopY = 95;
+      const selectedIdx = Math.min(selectedStageRef.current, STAGES.length - 1);
+      STAGES.forEach((s, i) => {
+        const col = i % cols; const row = Math.floor(i / cols);
+        const x = gridX + col * (size + margin); const y = gridTopY + row * (size + margin);
+        ctx.fillStyle = s.locked ? '#050a14' : '#172a45';
+        ctx.fillRect(x, y, size, size);
+        if (!s.locked && stageBackgrounds.current[i] && isValid(stageBackgrounds.current[i])) {
+          ctx.drawImage(stageBackgrounds.current[i]!, x + 4, y + 4, size - 8, size - 8);
+        } else if (s.locked) {
+          ctx.fillStyle = '#444'; ctx.font = '24px "Press Start 2P"'; ctx.textAlign = 'center';
+          ctx.fillText("?", x + size/2, y + size/2 + 8);
+        }
+        ctx.strokeStyle = i === selectedIdx ? '#f00' : (s.locked ? '#444' : '#ffd700');
+        ctx.lineWidth = i === selectedIdx ? 6 : (s.locked ? 2 : 4);
+        ctx.strokeRect(x, y, size, size);
+      });
+      const currentStage = STAGES[selectedIdx];
+      ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"';
+      ctx.fillStyle = currentStage.locked ? '#444' : '#ffd700';
+      ctx.fillText(currentStage.locked ? "LOCKED" : currentStage.name, 200, 400);
+      frameCounter.current++;
+      if (frameCounter.current > 10) {
+        let changed = false;
+        if (keys.current['ArrowRight']) { setSelectedStage(p => (p + 1) % STAGES.length); changed = true; }
+        else if (keys.current['ArrowLeft']) { setSelectedStage(p => (p - 1 + STAGES.length) % STAGES.length); changed = true; }
+        else if (keys.current['ArrowDown']) { setSelectedStage(p => (p + 3) % STAGES.length); changed = true; }
+        else if (keys.current['ArrowUp']) { setSelectedStage(p => (p - 3 + STAGES.length) % STAGES.length); changed = true; }
+        if (changed) { frameCounter.current = 0; sounds.playSFX('select'); }
+      }
+      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
+        if (!currentStage.locked) {
+          const bg = stageBackgrounds.current[selectedIdx];
+          fightBackground.current = bg && isValid(bg) ? bg : null;
+          initFighters(selectedCharRef.current, cpuCharRef.current);
+          setGameState('FIGHT');
         }
       }
     } else if (state === 'FIGHT') {
