@@ -279,7 +279,7 @@ const FighterApp = () => {
             
             if (path.includes('backgrounds/home')) assets['home_bg'] = url;
             else if (path.includes('backgrounds/menu')) assets['menu_bg'] = url;
-            else if (path.includes('stages/')) {
+            else if (path.includes('backgrounds/stages')) {
               const name = parts[parts.length - 1].replace(/\.(png|jpg|jpeg)$/i, '');
               assets[`stage_${name}`] = url;
             }
