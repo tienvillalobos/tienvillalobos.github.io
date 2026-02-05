@@ -19,7 +19,7 @@ const CHAR_SELECT_SLOTS = 8; // Slots visibles en el menú de selección (grid 4
 const STAGES = [
   { id: 0, name: 'ARENA', assetKey: 'arena', locked: false },
   { id: 1, name: 'COFFEE ROOM', assetKey: 'coffee_room', locked: false },
-  { id: 2, name: '???', locked: true },
+  { id: 2, name: 'LOBBY', assetKey: 'lobby', locked: false },
   { id: 3, name: '???', locked: true },
   { id: 4, name: '???', locked: true },
   { id: 5, name: '???', locked: true },
@@ -345,7 +345,7 @@ const FighterApp = () => {
     const totalFrames = 36;
     const categories = ['idle', 'walk', 'attack'];
     const playableChars = ['eric', 'david', 'jostin', 'manu'];
-    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 4;
+    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 5;
     let loadedCount = 0;
 
     const getImg = (key: string): Promise<HTMLImageElement> => {
@@ -363,7 +363,8 @@ const FighterApp = () => {
     stageBackgrounds.current = [
       await getImg('stage_arena'),
       await getImg('stage_coffee_room'),
-      null, null, null, null,
+      await getImg('stage_lobby'),
+      null, null, null,
     ];
 
     for (const charName of playableChars) {
@@ -620,7 +621,7 @@ const FighterApp = () => {
       if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
       ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("SELECT STAGE", CANVAS_WIDTH/2, 55);
+      ctx.fillText("SELECT STAGE", CANVAS_WIDTH/2, 410);
       const size = 120; const margin = 24; const cols = 3;
       const gridW = cols * size + (cols - 1) * margin;
       const gridX = (CANVAS_WIDTH - gridW) / 2;
