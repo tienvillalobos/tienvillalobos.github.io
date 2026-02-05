@@ -750,7 +750,7 @@ const FighterApp = () => {
           type="button"
           onClick={() => setFightPaused(true)}
           style={{
-            position: 'absolute', top: 72, right: 8,
+            position: 'absolute', top: 72, left: '50%', transform: 'translateX(-50%)',
             fontFamily: '"Press Start 2P", cursive',
             fontSize: '10px', padding: '6px 10px',
             background: 'rgba(0,0,0,0.7)', color: '#fff', border: '2px solid #fff',
