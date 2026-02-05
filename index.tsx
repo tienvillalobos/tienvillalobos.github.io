@@ -526,16 +526,14 @@ const FighterApp = () => {
     } else if (state === 'CHARACTER_SELECT') {
       if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
-      ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 60);
-      
       const size = 90; const margin = 20; const gridX = (CANVAS_WIDTH - (4*size + 3*margin))/2;
+      const gridTopY = 110;
       const charsInSelect = CHARACTERS.slice(0, CHAR_SELECT_SLOTS);
       const selectedIdx = Math.min(selectedCharRef.current, CHAR_SELECT_SLOTS - 1);
       const mugPad = 5; const mugSize = size - mugPad * 2;
       
       charsInSelect.forEach((c, i) => {
-        const x = gridX + (i % 4) * (size + margin); const y = 110 + Math.floor(i / 4) * (size + margin);
+        const x = gridX + (i % 4) * (size + margin); const y = gridTopY + Math.floor(i / 4) * (size + margin);
         ctx.fillStyle = c.locked ? '#050a14' : '#172a45'; 
         ctx.fillRect(x, y, size, size);
         
@@ -558,13 +556,15 @@ const FighterApp = () => {
         }
         
         ctx.strokeStyle = i === selectedIdx ? '#f00' : (c.locked ? '#444' : '#ffd700'); 
-        ctx.lineWidth = i === selectedIdx ? 6 : 2; ctx.strokeRect(x,y,size,size);
+        ctx.lineWidth = i === selectedIdx ? 6 : (c.locked ? 2 : 4); ctx.strokeRect(x,y,size,size);
       });
       
       const currentChar = CHARACTERS[selectedIdx];
       ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"'; 
       ctx.fillStyle = currentChar.locked ? '#444' : currentChar.color;
       ctx.fillText(currentChar.locked ? "LOCKED" : currentChar.name, 200, 380);
+      ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
+      ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 410);
       
       frameCounter.current++;
       if (frameCounter.current > 10) {
