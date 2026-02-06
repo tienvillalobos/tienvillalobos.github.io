@@ -1,10 +1,9 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import JSZip from 'https://esm.sh/jszip@3.10.1';
 
 /**
  * Prompt Fighter - AI Arcade Edition
+ * Assets desde public/assets/ (backgrounds/, sounds/, characters/)
  */
 
 // Added 'STOP' to GameState union to fix TypeScript comparison error on line 191
@@ -231,16 +230,18 @@ const FighterApp = () => {
   }>>({});
 
   useEffect(() => { 
-    const oldState = gameStateRef.current;
+    const prevState = gameStateRef.current;
     gameStateRef.current = gameState;
     inputCooldownRef.current = 20;
     if (gameState !== 'FIGHT') setFightPaused(false);
 
-    // Actualizado: INTRO y TITLE (Home) usan fight.ogg
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
       sounds.playMusic('fight');
     } else if (gameState === 'CHARACTER_SELECT' || gameState === 'STAGE_SELECT') {
       sounds.playMusic('menu');
+      if (gameState === 'CHARACTER_SELECT' && prevState !== 'CHARACTER_SELECT') {
+        sounds.playBuffer('menu_voice');
+      }
     } else if (gameState === 'STOP') {
       sounds.playMusic('stop');
     }
@@ -274,129 +275,71 @@ const FighterApp = () => {
     screenShakeRef.current = 0;
   };
 
-  const processZipData = async (data: Blob) => {
+  const ASSETS_BASE = '/assets';
+
+  const loadAllAssets = async () => {
     setGameState('LOADING');
     setErrorMessage("");
     try {
-      const zip = new JSZip();
-      const content = await zip.loadAsync(data);
-      const assets: Record<string, string> = {};
-      const audioBuffersRaw: Record<string, ArrayBuffer> = {};
-      const filePromises: Promise<void>[] = [];
-      
-      content.forEach((relativePath, zipEntry) => {
-        const path = relativePath.toLowerCase();
-        if (!zipEntry.dir && (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg'))) {
-          const promise = zipEntry.async('blob').then(blob => {
-            const url = URL.createObjectURL(blob);
-            const parts = path.split('/');
-            
-            if (path.includes('backgrounds/home')) assets['home_bg'] = url;
-            else if (path.includes('backgrounds/menu')) assets['menu_bg'] = url;
-            else if (path.includes('backgrounds/stages')) {
-              const name = parts[parts.length - 1].replace(/\.(png|jpg|jpeg)$/i, '');
-              assets[`stage_${name}`] = url;
-            }
-            else if (path.includes('characters/')) {
-              const charName = parts[2];
-              if (path.includes('mugshot')) {
-                assets[`${charName}_mugshot`] = url;
-              } else {
-                const category = parts[3];
-                const frameName = parts[4];
-                assets[`${charName}_${category}_${frameName}`] = url;
-              }
-            }
-          });
-          filePromises.push(promise);
-        } else if (!zipEntry.dir && path.endsWith('.ogg')) {
-          const promise = zipEntry.async('arraybuffer').then(ab => {
-            const parts = path.split('/');
-            const filename = parts[parts.length - 1];
-            const name = filename.split('.')[0];
-            audioBuffersRaw[name] = ab;
-          });
-          filePromises.push(promise);
-        }
-      });
+      sounds.init();
 
-      await Promise.all(filePromises);
-      await loadEngineAssets(assets, audioBuffersRaw);
+      const soundNames = ['menu', 'fight', 'ko', 'menu_voice'];
+      for (const name of soundNames) {
+        const res = await fetch(`${ASSETS_BASE}/sounds/${name}.ogg`);
+        if (res.ok) {
+          const ab = await res.arrayBuffer();
+          await sounds.loadBuffer(name, ab);
+        }
+      }
+
+      const totalFrames = 36;
+      const categories = ['idle', 'walk', 'attack'];
+      const playableChars = ['eric', 'david', 'jostin', 'manu'];
+      const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 5;
+      let loadedCount = 0;
+
+      const getImg = (url: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => { loadedCount++; setLoadProgress(Math.floor((loadedCount / totalToLoad) * 100)); resolve(img); };
+          img.onerror = () => { loadedCount++; setLoadProgress(Math.floor((loadedCount / totalToLoad) * 100)); resolve(img); };
+          img.src = url;
+        });
+      };
+
+      homeBackground.current = await getImg(`${ASSETS_BASE}/backgrounds/home.png`);
+      menuBackground.current = await getImg(`${ASSETS_BASE}/backgrounds/menu.png`);
+      stageBackgrounds.current = [
+        await getImg(`${ASSETS_BASE}/backgrounds/stages/arena.png`),
+        await getImg(`${ASSETS_BASE}/backgrounds/stages/coffee_room.png`),
+        await getImg(`${ASSETS_BASE}/backgrounds/stages/lobby.png`),
+        null, null, null,
+      ];
+
+      for (const charName of playableChars) {
+        mugshots.current[charName] = await getImg(`${ASSETS_BASE}/characters/${charName}/mugshot.png`);
+        anims.current[charName] = { idle: [], walk: [], attack: [] };
+        for (const cat of categories) {
+          const promises = [];
+          for (let i = 1; i <= totalFrames; i++) {
+            const f = i.toString().padStart(3, '0');
+            promises.push(getImg(`${ASSETS_BASE}/characters/${charName}/${cat}/frame_${f}.png`));
+          }
+          const results = await Promise.all(promises);
+          anims.current[charName][cat as keyof typeof anims.current[string]] = results.filter(img => isValid(img));
+        }
+      }
+      setGameState('INTRO');
     } catch (e) {
-      console.error("Error procesando ZIP:", e);
-      setErrorMessage("Error: assets.zip no es un archivo válido o está corrupto.");
+      console.error("Error cargando assets:", e);
+      setErrorMessage("Error al cargar assets desde /assets/");
       setGameState('ERROR');
     }
   };
 
   useEffect(() => {
-    const attemptAutoLoad = async () => {
-      try {
-        const response = await fetch('assets.zip');
-        if (response.ok) {
-          const blob = await response.blob();
-          await processZipData(blob);
-        } else {
-          throw new Error("Local assets.zip not found (404)");
-        }
-      } catch (err: any) {
-        console.error("Error cargando assets local:", err);
-        setErrorMessage("Error: No se encontró 'assets.zip' en el servidor.");
-        setGameState('ERROR');
-      }
-    };
-    if (gameState === 'BOOT') attemptAutoLoad();
+    if (gameState === 'BOOT') loadAllAssets();
   }, []);
-
-  const loadEngineAssets = async (assets: Record<string, string>, audioBuffersRaw: Record<string, ArrayBuffer>) => {
-    sounds.init();
-    
-    // Cargar sonidos primero
-    for (const [name, ab] of Object.entries(audioBuffersRaw)) {
-      await sounds.loadBuffer(name, ab);
-    }
-
-    const totalFrames = 36;
-    const categories = ['idle', 'walk', 'attack'];
-    const playableChars = ['eric', 'david', 'jostin', 'manu'];
-    const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 5;
-    let loadedCount = 0;
-
-    const getImg = (key: string): Promise<HTMLImageElement> => {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => { loadedCount++; setLoadProgress(Math.floor((loadedCount / totalToLoad) * 100)); resolve(img); };
-        img.onerror = () => { loadedCount++; setLoadProgress(Math.floor((loadedCount / totalToLoad) * 100)); resolve(img); };
-        if (assets[key]) img.src = assets[key];
-        else { loadedCount++; resolve(img); }
-      });
-    };
-
-    homeBackground.current = await getImg('home_bg');
-    menuBackground.current = await getImg('menu_bg');
-    stageBackgrounds.current = [
-      await getImg('stage_arena'),
-      await getImg('stage_coffee_room'),
-      await getImg('stage_lobby'),
-      null, null, null,
-    ];
-
-    for (const charName of playableChars) {
-      mugshots.current[charName] = await getImg(`${charName}_mugshot`);
-      anims.current[charName] = { idle: [], walk: [], attack: [] };
-      for (const cat of categories) {
-        const promises = [];
-        for (let i = 1; i <= totalFrames; i++) {
-          const f = i.toString().padStart(3, '0');
-          const filename = `frame_${f}.png`;
-          promises.push(getImg(`${charName}_${cat}_${filename}`));
-        }
-        const results = await Promise.all(promises);
-        anims.current[charName][cat as keyof typeof anims.current[string]] = results.filter(img => isValid(img));
-      }
-    }
-    setGameState('INTRO');
-  };
 
   const initFighters = (pIdx: number, cIdx: number) => {
     playerRef.current = {
