@@ -543,16 +543,24 @@ const FighterApp = () => {
       
       const currentChar = CHARACTERS[selectedIdx];
       const leftPreviewX = 24; const leftPreviewY = 130; const leftPreviewSize = 140;
+      const previewOuter = leftPreviewSize + 8;
       if (!currentChar.locked) {
         const charAnims = anims.current[currentChar.name.toLowerCase()];
         const idle0 = charAnims?.idle?.[0];
         if (idle0 && isValid(idle0)) {
           ctx.fillStyle = '#f0f0f0';
-          ctx.fillRect(leftPreviewX - 4, leftPreviewY - 4, leftPreviewSize + 8, leftPreviewSize + 8);
+          ctx.fillRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
           ctx.strokeStyle = currentChar.color; ctx.lineWidth = 3;
-          ctx.strokeRect(leftPreviewX - 4, leftPreviewY - 4, leftPreviewSize + 8, leftPreviewSize + 8);
+          ctx.strokeRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
           ctx.drawImage(idle0, leftPreviewX, leftPreviewY, leftPreviewSize, leftPreviewSize);
         }
+      } else {
+        ctx.fillStyle = '#050a14';
+        ctx.fillRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
+        ctx.strokeStyle = '#444'; ctx.lineWidth = 3;
+        ctx.strokeRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
+        ctx.fillStyle = '#444'; ctx.font = '48px "Press Start 2P"'; ctx.textAlign = 'center';
+        ctx.fillText("?", leftPreviewX + leftPreviewSize/2, leftPreviewY + leftPreviewSize/2 + 16);
       }
       const cardX = 618; const cardY = 95; const cardW = 168; const cardH = 260;
       ctx.fillStyle = 'rgba(23, 42, 69, 0.95)';
