@@ -281,9 +281,13 @@ const FighterApp = () => {
   }, [serverRoomState, gameState]);
 
   // Guest: pasar a STAGE_SELECT cuando el host pulse "continuar" (backend envía hostContinuedToStageSelect)
+  // o cuando el host ya eligió etapa (stage != null), por si el backend no implementa advance_to_stage
   useEffect(() => {
-    if (!serverRoomState?.hostContinuedToStageSelect || gameState !== 'CHARACTER_SELECT' || !roomClientRef.current || isOnlineHostRef.current) return;
-    const oppChar = serverRoomState.hostChar;
+    if (gameState !== 'CHARACTER_SELECT' || !roomClientRef.current || isOnlineHostRef.current) return;
+    const room = serverRoomState;
+    const shouldAdvance = room?.hostContinuedToStageSelect || (room?.status === 'stage_select' && room?.stage != null);
+    if (!shouldAdvance) return;
+    const oppChar = room?.hostChar;
     const oppIdx = oppChar != null ? parseInt(String(oppChar), 10) : 0;
     if (!Number.isNaN(oppIdx)) {
       setCpuChar(oppIdx);
