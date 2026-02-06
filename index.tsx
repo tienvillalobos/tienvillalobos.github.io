@@ -1,192 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-/**
- * Prompt Fighter - AI Arcade Edition
- * Assets desde public/assets/ (backgrounds/, sounds/, characters/)
- */
-
-// Added 'STOP' to GameState union to fix TypeScript comparison error on line 191
-type GameState = 'BOOT' | 'LOADING' | 'INTRO' | 'TITLE' | 'CHARACTER_SELECT' | 'STAGE_SELECT' | 'FIGHT' | 'ROUND_KO' | 'ROUND_RESULT' | 'GAME_OVER' | 'ERROR' | 'STOP';
-
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 450;
-const GROUND_Y = 190;
-const MARGIN_X = 15; // Margen horizontal por lado: los personajes no pueden pasar de este borde
-const CHAR_SELECT_SLOTS = 8; // Slots visibles en el menú de selección (grid 4x2)
-
-const STAGES = [
-  { id: 0, name: 'ARENA', assetKey: 'arena', locked: false },
-  { id: 1, name: 'COFFEE ROOM', assetKey: 'coffee_room', locked: false },
-  { id: 2, name: 'LOBBY', assetKey: 'lobby', locked: false },
-  { id: 3, name: '???', locked: true },
-  { id: 4, name: '???', locked: true },
-  { id: 5, name: '???', locked: true },
-];
-
-// Stamina: no se puede golpear infinito; cada golpe gasta, se regenera con el tiempo
-const STAMINA_MAX = 100;
-const STAMINA_COST = 28; // Coste por ataque
-const STAMINA_REGEN = 0.35; // Por frame (regeneración continua)
-
-const CHARACTERS = [
-  { id: 0, name: 'ERIC', color: '#EF4444', locked: false },
-  { id: 1, name: 'DAVID', color: '#4285F4', locked: false },
-  { id: 2, name: 'JOSTIN', color: '#22C55E', locked: false },
-  { id: 3, name: 'MANU', color: '#E879F9', locked: false },
-  { id: 4, name: 'CLAUDE', color: '#D97757', locked: true },
-  { id: 5, name: 'GPT-4', color: '#10A37F', locked: true },
-  { id: 6, name: 'LLAMA', color: '#0668E1', locked: true },
-  { id: 7, name: 'MISTRAL', color: '#FCD34D', locked: true },
-  { id: 8, name: 'GROK', color: '#FFFFFF', locked: true },
-  { id: 9, name: 'DEEPSEEK', color: '#6366F1', locked: true },
-];
-
-// Stats por personaje (visual en selección; luego se usarán en combate). Valores 0–100.
-const CHARACTER_STATS: { speed: number; strength: number; agility: number }[] = [
-  { speed: 72, strength: 85, agility: 68 },
-  { speed: 68, strength: 78, agility: 88 },
-  { speed: 80, strength: 70, agility: 82 },
-  { speed: 75, strength: 82, agility: 75 },
-  { speed: 65, strength: 90, agility: 60 },
-  { speed: 88, strength: 65, agility: 90 },
-  { speed: 70, strength: 75, agility: 85 },
-  { speed: 82, strength: 72, agility: 78 },
-  { speed: 78, strength: 88, agility: 70 },
-  { speed: 85, strength: 68, agility: 80 },
-];
-
-// --- Audio Engine ---
-class SoundManager {
-  private ctx: AudioContext | null = null;
-  private musicSource: AudioBufferSourceNode | null = null;
-  private musicGain: GainNode | null = null;
-  private buffers: Record<string, AudioBuffer> = {};
-  private currentMusicMode: string | null = null;
-
-  init() {
-    if (!this.ctx) this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  }
-
-  async loadBuffer(name: string, arrayBuffer: ArrayBuffer) {
-    this.init();
-    try {
-      const buffer = await this.ctx!.decodeAudioData(arrayBuffer);
-      this.buffers[name] = buffer;
-    } catch (e) {
-      console.error(`Error decoding audio: ${name}`, e);
-    }
-  }
-
-  playSFX(type: 'select' | 'hit' | 'start' | 'ko' | 'jump' | 'attack') {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    if (type === 'select') {
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(440, t);
-      osc.frequency.exponentialRampToValueAtTime(880, t + 0.1);
-      gain.gain.setValueAtTime(0.1, t);
-      gain.gain.linearRampToValueAtTime(0, t + 0.1);
-      osc.start(t); osc.stop(t + 0.1);
-    } else if (type === 'hit') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(150, t);
-      osc.frequency.linearRampToValueAtTime(40, t + 0.2);
-      gain.gain.setValueAtTime(0.3, t);
-      gain.gain.linearRampToValueAtTime(0, t + 0.2);
-      osc.start(t); osc.stop(t + 0.2);
-    } else if (type === 'attack') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, t);
-      osc.frequency.exponentialRampToValueAtTime(200, t + 0.1);
-      gain.gain.setValueAtTime(0.1, t);
-      gain.gain.linearRampToValueAtTime(0, t + 0.1);
-      osc.start(t); osc.stop(t + 0.1);
-    } else if (type === 'start') {
-      osc.type = 'square';
-      [440, 554, 659].forEach((f, i) => {
-        const o = this.ctx!.createOscillator();
-        const g = this.ctx!.createGain();
-        o.type = 'square'; o.frequency.value = f;
-        o.connect(g); g.connect(this.ctx!.destination);
-        g.gain.setValueAtTime(0, t + i * 0.1);
-        g.gain.linearRampToValueAtTime(0.1, t + i * 0.1 + 0.05);
-        g.gain.linearRampToValueAtTime(0, t + i * 0.1 + 0.1);
-        o.start(t + i * 0.1); o.stop(t + i * 0.1 + 0.1);
-      });
-    }
-  }
-
-  playBuffer(name: string) {
-    if (!this.ctx) return;
-    const buffer = this.buffers[name];
-    if (!buffer) return;
-    const src = this.ctx.createBufferSource();
-    src.buffer = buffer;
-    src.connect(this.ctx.destination);
-    src.start();
-  }
-
-  playMusic(mode: 'menu' | 'fight' | 'stop') {
-    if (this.currentMusicMode === mode) return;
-    this.currentMusicMode = mode;
-
-    if (!this.ctx) this.init();
-    
-    if (this.musicSource) {
-      try { this.musicSource.stop(); } catch(e) {}
-      this.musicSource = null;
-    }
-    
-    if (mode === 'stop') return;
-
-    const buffer = this.buffers[mode];
-    if (!buffer) {
-      console.warn(`Buffer de música no encontrado para: ${mode}`);
-      return;
-    }
-
-    this.musicSource = this.ctx!.createBufferSource();
-    this.musicSource.buffer = buffer;
-    this.musicSource.loop = true;
-
-    this.musicGain = this.ctx!.createGain();
-    // Bajamos sutilmente el volumen de fight (0.25) vs menu (0.4)
-    this.musicGain.gain.value = mode === 'fight' ? 0.25 : 0.4;
-    this.musicGain.connect(this.ctx!.destination);
-
-    this.musicSource.connect(this.musicGain);
-    this.musicSource.start();
-  }
-}
-
-const sounds = new SoundManager();
-
-interface Fighter {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  hp: number;
-  maxHp: number;
-  direction: 1 | -1;
-  state: 'IDLE' | 'WALK' | 'ATTACK' | 'HIT' | 'JUMP';
-  animFrame: number;
-  animTimer: number;
-  velocityX: number;
-  velocityY: number;
-  isAttacking: boolean;
-  stamina: number;
-  maxStamina: number;
-  color: string;
-  name: string;
-  charId: number;
-}
+import { sounds } from './src/audio/SoundManager';
+import {
+  ASSETS_BASE,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  GROUND_Y,
+  MARGIN_X,
+  CHAR_SELECT_SLOTS,
+  STAGES,
+  STAMINA_MAX,
+  STAMINA_COST,
+  STAMINA_REGEN,
+  CHARACTERS,
+  CHARACTER_STATS,
+} from './src/game/constants';
+import type { GameState } from './src/game/types';
+import type { Fighter } from './src/game/types';
+import {
+  createRoomClient,
+  generateRoomId,
+  type RoomState as ServerRoomState,
+  type FightSyncPayload,
+} from './src/online/roomClient';
 
 const FighterApp = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -202,6 +39,22 @@ const FighterApp = () => {
   const fightPausedRef = useRef(false);
   const [selectedStage, setSelectedStage] = useState(0);
   const selectedStageRef = useRef(0);
+
+  // Modo Local vs Online
+  const [modeSelectIndex, setModeSelectIndex] = useState(0);
+  const modeSelectIndexRef = useRef(0);
+  // Online: nombre, link, estado de la sala (del servidor)
+  const [onlinePlayerName, setOnlinePlayerName] = useState('');
+  const [challengeLink, setChallengeLink] = useState('');
+  const [serverRoomState, setServerRoomState] = useState<ServerRoomState | null>(null);
+  const serverRoomStateRef = useRef<ServerRoomState | null>(null);
+  const [otherPlayerSlotIndex, setOtherPlayerSlotIndex] = useState<number | null>(null); // slot sobre el que pasa el otro (tiempo real)
+  const otherPlayerSlotIndexRef = useRef<number | null>(null);
+  const roomClientRef = useRef<ReturnType<typeof createRoomClient> | null>(null);
+  const isOnlineHostRef = useRef(false);
+  const onlineStageConfirmedRef = useRef(false); // host: ya eligió stage, siguiente Space = start_fight
+  const lastSentSlotRef = useRef<number>(-1); // para no enviar cursor si no cambió
+  const guestKeysRef = useRef<{ left?: boolean; right?: boolean; up?: boolean; attack?: boolean }>({}); // host: inputs del guest para P2
 
   // Core Game Refs
   const roundRef = useRef(1);
@@ -237,7 +90,7 @@ const FighterApp = () => {
 
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
       sounds.playMusic('fight');
-    } else if (gameState === 'CHARACTER_SELECT' || gameState === 'STAGE_SELECT') {
+    } else if (gameState === 'MODE_SELECT' || gameState === 'ONLINE_LINK' || gameState === 'CHARACTER_SELECT' || gameState === 'ONLINE_CHARS_READY' || gameState === 'STAGE_SELECT') {
       sounds.playMusic('menu');
       if (gameState === 'CHARACTER_SELECT' && prevState !== 'CHARACTER_SELECT') {
         sounds.playBuffer('menu_voice');
@@ -263,6 +116,18 @@ const FighterApp = () => {
     selectedStageRef.current = selectedStage;
   }, [selectedStage]);
 
+  useEffect(() => {
+    modeSelectIndexRef.current = modeSelectIndex;
+  }, [modeSelectIndex]);
+
+  useEffect(() => {
+    serverRoomStateRef.current = serverRoomState;
+  }, [serverRoomState]);
+
+  useEffect(() => {
+    otherPlayerSlotIndexRef.current = otherPlayerSlotIndex;
+  }, [otherPlayerSlotIndex]);
+
   const isValid = (img: HTMLImageElement | null): img is HTMLImageElement => {
     return !!(img && img.complete && img.naturalWidth > 0);
   };
@@ -274,8 +139,6 @@ const FighterApp = () => {
     frameCounter.current = 0;
     screenShakeRef.current = 0;
   };
-
-  const ASSETS_BASE = '/assets';
 
   const loadAllAssets = async () => {
     setGameState('LOADING');
@@ -329,7 +192,14 @@ const FighterApp = () => {
           anims.current[charName][cat as keyof typeof anims.current[string]] = results.filter(img => isValid(img));
         }
       }
-      setGameState('INTRO');
+      // Si entró por link de desafío (?room=...), ir directo al input de nombre
+      const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+      if (params.get('room')) {
+        isOnlineHostRef.current = false;
+        setGameState('ONLINE_NAME');
+      } else {
+        setGameState('INTRO');
+      }
     } catch (e) {
       console.error("Error cargando assets:", e);
       setErrorMessage("Error al cargar assets desde /assets/");
@@ -340,6 +210,160 @@ const FighterApp = () => {
   useEffect(() => {
     if (gameState === 'BOOT') loadAllAssets();
   }, []);
+
+  // Suscribirse al estado de la sala durante todo el flujo online (si solo fuera ONLINE_LINK, al pasar a CHARACTER_SELECT nos desuscribíamos y no recibíamos stage_select)
+  useEffect(() => {
+    const onlineStates: GameState[] = ['ONLINE_LINK', 'CHARACTER_SELECT', 'ONLINE_CHARS_READY', 'STAGE_SELECT', 'FIGHT', 'ROUND_KO', 'ROUND_RESULT', 'GAME_OVER'];
+    if (!onlineStates.includes(gameState) || !roomClientRef.current) return;
+    const client = roomClientRef.current;
+    const unsub = client.subscribeToRoomState((state) => setServerRoomState(state));
+    return () => {
+      unsub();
+    };
+  }, [gameState]);
+
+  // Cerrar el cliente solo cuando salimos de la pantalla online (no en el cleanup del efecto anterior)
+  useEffect(() => {
+    if (gameState !== 'ONLINE_LINK' && gameState !== 'CHARACTER_SELECT' && gameState !== 'ONLINE_CHARS_READY' && gameState !== 'STAGE_SELECT' && gameState !== 'FIGHT' && gameState !== 'ROUND_KO' && gameState !== 'ROUND_RESULT' && gameState !== 'GAME_OVER') {
+      if (roomClientRef.current) {
+        roomClientRef.current.close();
+        roomClientRef.current = null;
+      }
+    }
+  }, [gameState]);
+
+  // Transición ONLINE_LINK -> CHARACTER_SELECT cuando ambos están y el servidor pasa a char_select
+  useEffect(() => {
+    if (serverRoomState?.status === 'char_select' && gameState === 'ONLINE_LINK') {
+      setGameState('CHARACTER_SELECT');
+      setOtherPlayerSlotIndex(null);
+      lastSentSlotRef.current = -1;
+    }
+  }, [serverRoomState?.status, gameState]);
+
+  // Enviar en tiempo real el slot sobre el que pasamos (para que el otro vea el preview tipo Smash)
+  useEffect(() => {
+    if (gameState !== 'CHARACTER_SELECT' || !roomClientRef.current) return;
+    const slot = selectedCharRef.current;
+    if (slot === lastSentSlotRef.current) return;
+    lastSentSlotRef.current = slot;
+    roomClientRef.current.sendInput({ slotIndex: slot });
+  }, [gameState, selectedChar]);
+
+  // Recibir el slot del otro jugador en tiempo real (solo en char select online)
+  useEffect(() => {
+    if (gameState !== 'CHARACTER_SELECT' || !roomClientRef.current) return;
+    const client = roomClientRef.current;
+    const unsub = client.subscribeToInput((payload: unknown) => {
+      const p = payload as { slotIndex?: number };
+      if (p != null && typeof p.slotIndex === 'number') {
+        const idx = Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, p.slotIndex));
+        setOtherPlayerSlotIndex(idx);
+      }
+    });
+    return unsub;
+  }, [gameState]);
+
+  // Transición cuando ambos eligieron: solo el host va a ONLINE_CHARS_READY; el guest se queda en CHARACTER_SELECT hasta que el host pulse Space
+  useEffect(() => {
+    if (!serverRoomState || serverRoomState.status !== 'stage_select' || gameState !== 'CHARACTER_SELECT' || !roomClientRef.current) return;
+    const oppChar = isOnlineHostRef.current ? serverRoomState.guestChar : serverRoomState.hostChar;
+    const oppIdx = oppChar != null ? parseInt(String(oppChar), 10) : 0;
+    if (!Number.isNaN(oppIdx)) {
+      setCpuChar(oppIdx);
+      cpuCharRef.current = oppIdx;
+    }
+    onlineStageConfirmedRef.current = false;
+    if (isOnlineHostRef.current) {
+      setGameState('ONLINE_CHARS_READY');
+    }
+    // guest se queda en CHARACTER_SELECT y verá "Esperando al host" hasta recibir hostContinuedToStageSelect
+  }, [serverRoomState, gameState]);
+
+  // Guest: pasar a STAGE_SELECT cuando el host pulse "continuar" (backend envía hostContinuedToStageSelect)
+  useEffect(() => {
+    if (!serverRoomState?.hostContinuedToStageSelect || gameState !== 'CHARACTER_SELECT' || !roomClientRef.current || isOnlineHostRef.current) return;
+    const oppChar = serverRoomState.hostChar;
+    const oppIdx = oppChar != null ? parseInt(String(oppChar), 10) : 0;
+    if (!Number.isNaN(oppIdx)) {
+      setCpuChar(oppIdx);
+      cpuCharRef.current = oppIdx;
+    }
+    setGameState('STAGE_SELECT');
+  }, [serverRoomState, gameState]);
+
+  // Transición STAGE_SELECT -> FIGHT cuando el host inicia la pelea
+  useEffect(() => {
+    if (serverRoomState?.status !== 'fighting' || gameState !== 'STAGE_SELECT' || !roomClientRef.current) return;
+    const stageId = serverRoomState.stage != null ? parseInt(serverRoomState.stage, 10) : 0;
+    const stageIdx = Number.isNaN(stageId) ? 0 : Math.min(Math.max(0, stageId), STAGES.length - 1);
+    const bg = stageBackgrounds.current[stageIdx];
+    fightBackground.current = bg && isValid(bg) ? bg : null;
+    resetMatchState();
+    guestKeysRef.current = {};
+    initFighters(selectedCharRef.current, cpuCharRef.current);
+    setGameState('FIGHT');
+  }, [serverRoomState?.status, serverRoomState?.stage, gameState]);
+
+  // Guest: suscribirse a state_sync durante la pelea para recibir estado del host
+  useEffect(() => {
+    if (gameState !== 'FIGHT' && gameState !== 'ROUND_KO' && gameState !== 'ROUND_RESULT' && gameState !== 'GAME_OVER') return;
+    const client = roomClientRef.current;
+    if (!client || isOnlineHostRef.current) return;
+    const unsub = client.subscribeToStateSync(applyFightSync);
+    return unsub;
+  }, [gameState]);
+
+  // Host: suscribirse a input del guest durante la pelea para controlar P2
+  useEffect(() => {
+    if (gameState !== 'FIGHT' && gameState !== 'ROUND_KO') return;
+    const client = roomClientRef.current;
+    if (!client || !isOnlineHostRef.current) return;
+    const unsub = client.subscribeToInput((payload: unknown) => {
+      const p = payload as { left?: boolean; right?: boolean; up?: boolean; attack?: boolean };
+      if (p && typeof p === 'object') guestKeysRef.current = { left: !!p.left, right: !!p.right, up: !!p.up, attack: !!p.attack };
+    });
+    return unsub;
+  }, [gameState]);
+
+  const handleOnlineSubmit = () => {
+    const name = onlinePlayerName.trim();
+    if (!name) return;
+    const isHost = isOnlineHostRef.current;
+    const roomId = isHost ? generateRoomId() : new URLSearchParams(window.location.search).get('room') ?? '';
+    if (!roomId && !isHost) return;
+    const client = createRoomClient(roomId);
+    roomClientRef.current = client;
+    client.sendJoin(name, isHost);
+    if (isHost) {
+      const base = window.location.origin + window.location.pathname;
+      const link = `${base}?room=${roomId}`;
+      setChallengeLink(link);
+    }
+    setGameState('ONLINE_LINK');
+  };
+
+  const handleCopyLink = () => {
+    if (challengeLink) {
+      navigator.clipboard.writeText(challengeLink);
+      sounds.playSFX('select');
+    }
+  };
+
+  const applyFightSync = (payload: FightSyncPayload) => {
+    playerRef.current = payload.p1 as unknown as Fighter;
+    cpuRef.current = payload.p2 as unknown as Fighter;
+    timer.current = payload.timer;
+    scoreRef.current = { ...payload.score };
+    roundRef.current = payload.round;
+    winnerNameRef.current = payload.winnerName ?? null;
+    if (payload.frameCounter != null) frameCounter.current = payload.frameCounter;
+    if (payload.phase === 'ROUND_KO' && payload.winnerName) {
+      const p1 = payload.p1 as unknown as Fighter;
+      roundLoserRef.current = payload.winnerName === p1.name ? (payload.p2 as unknown as Fighter) : p1;
+    }
+    if (payload.phase !== gameStateRef.current) setGameState(payload.phase);
+  };
 
   const initFighters = (pIdx: number, cIdx: number) => {
     playerRef.current = {
@@ -360,19 +384,37 @@ const FighterApp = () => {
     sounds.playSFX('start');
   };
 
-  const updateCombat = (f: Fighter, opp: Fighter, isCpu: boolean) => {
-    if (f.y < GROUND_Y) { f.velocityY += 0.9; f.state = 'JUMP'; } 
+  type CombatControl = 'player' | 'cpu' | 'remote';
+
+  const updateCombat = (f: Fighter, opp: Fighter, control: CombatControl) => {
+    if (f.y < GROUND_Y) { f.velocityY += 0.9; f.state = 'JUMP'; }
     else { f.y = GROUND_Y; f.velocityY = 0; if (f.state === 'JUMP') f.state = 'IDLE'; }
 
     const canAct = frameCounter.current >= 120;
+    const isPlayer = control === 'player';
+    const isCpu = control === 'cpu';
+    const isRemote = control === 'remote';
+    const remoteKeys = guestKeysRef.current;
 
-    if (!isCpu && canAct) {
+    if (isPlayer && canAct) {
       if (!f.isAttacking && f.state !== 'HIT') {
         if (keys.current['KeyA'] || keys.current['ArrowLeft']) { f.velocityX = -4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = -1; }
         else if (keys.current['KeyD'] || keys.current['ArrowRight']) { f.velocityX = 4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
         else { f.velocityX = 0; if (f.y === GROUND_Y) f.state = 'IDLE'; }
         if ((keys.current['KeyW'] || keys.current['ArrowUp']) && f.y === GROUND_Y) f.velocityY = -15;
         if ((keys.current['Space'] || keys.current['KeyK']) && f.stamina >= STAMINA_COST) {
+          f.stamina -= STAMINA_COST;
+          f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0;
+          sounds.playSFX('attack');
+        }
+      }
+    } else if (isRemote && canAct) {
+      if (!f.isAttacking && f.state !== 'HIT') {
+        if (remoteKeys.left) { f.velocityX = -4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = -1; }
+        else if (remoteKeys.right) { f.velocityX = 4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
+        else { f.velocityX = 0; if (f.y === GROUND_Y) f.state = 'IDLE'; }
+        if (remoteKeys.up && f.y === GROUND_Y) f.velocityY = -15;
+        if (remoteKeys.attack && f.stamina >= STAMINA_COST) {
           f.stamina -= STAMINA_COST;
           f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0;
           sounds.playSFX('attack');
@@ -500,11 +542,58 @@ const FighterApp = () => {
       ctx.textAlign = 'center';
       if (Math.floor(Date.now() / 600) % 2 === 0) ctx.fillText("PRESS SPACE TO START", CANVAS_WIDTH/2, 350);
       
-      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) { 
+      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         sounds.init();
         sounds.playSFX('select');
-        setGameState('CHARACTER_SELECT'); 
+        setGameState('MODE_SELECT');
       }
+    } else if (state === 'MODE_SELECT') {
+      if (isValid(homeBackground.current)) {
+        ctx.drawImage(homeBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } else { ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
+      ctx.fillStyle = '#fff'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
+      ctx.fillText("LOCAL", CANVAS_WIDTH/2, 200);
+      ctx.fillText("ONLINE", CANVAS_WIDTH/2, 260);
+      const idx = modeSelectIndexRef.current;
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText(idx === 0 ? "> LOCAL" : "> ONLINE", CANVAS_WIDTH/2, idx === 0 ? 200 : 260);
+      ctx.fillStyle = '#888'; ctx.font = '10px "Press Start 2P"';
+      ctx.fillText("ARROWS + SPACE/ENTER", CANVAS_WIDTH/2, 350);
+      frameCounter.current++;
+      if (frameCounter.current > 10) {
+        let changed = false;
+        if (keys.current['ArrowDown']) { setModeSelectIndex(1); changed = true; }
+        else if (keys.current['ArrowUp']) { setModeSelectIndex(0); changed = true; }
+        if (changed) { frameCounter.current = 0; sounds.playSFX('select'); }
+      }
+      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
+        sounds.playSFX('select');
+        if (idx === 0) {
+          setGameState('CHARACTER_SELECT');
+        } else {
+          const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+          const roomFromUrl = params.get('room');
+          if (roomFromUrl) {
+            isOnlineHostRef.current = false;
+            setGameState('ONLINE_NAME');
+          } else {
+            isOnlineHostRef.current = true;
+            setOnlinePlayerName('');
+            setChallengeLink('');
+            setServerRoomState(null);
+            setGameState('ONLINE_NAME');
+          }
+        }
+      }
+    } else if (state === 'ONLINE_NAME' || state === 'ONLINE_LINK') {
+      ctx.fillStyle = '#0a192f';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      if (state === 'ONLINE_NAME') ctx.fillText("INGRESA TU NOMBRE", CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 40);
+      // ONLINE_LINK: el resto se ve en el overlay (link, copiar, esperando)
     } else if (state === 'CHARACTER_SELECT') {
       if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
@@ -513,12 +602,19 @@ const FighterApp = () => {
       const charsInSelect = CHARACTERS.slice(0, CHAR_SELECT_SLOTS);
       const selectedIdx = Math.min(selectedCharRef.current, CHAR_SELECT_SLOTS - 1);
       const mugPad = 5; const mugSize = size - mugPad * 2;
-      
+      const isOnlineChar = !!roomClientRef.current;
+      const P1_COLOR = '#EF4444';
+      const P2_COLOR = '#4285F4';
+      const room = serverRoomStateRef.current;
+      const isHost = isOnlineHostRef.current;
+      const hasConfirmed = isOnlineChar && room && (isHost ? room.hostChar != null : room.guestChar != null);
+      const otherName = room ? (isHost ? room.guestName : room.hostName) : null;
+
       charsInSelect.forEach((c, i) => {
         const x = gridX + (i % 4) * (size + margin); const y = gridTopY + Math.floor(i / 4) * (size + margin);
-        ctx.fillStyle = c.locked ? '#050a14' : '#172a45'; 
+        ctx.fillStyle = c.locked ? '#050a14' : '#172a45';
         ctx.fillRect(x, y, size, size);
-        
+
         if (!c.locked) {
           const mug = mugshots.current[c.name.toLowerCase()];
           const mx = x + mugPad; const my = y + mugPad;
@@ -536,11 +632,30 @@ const FighterApp = () => {
           ctx.fillStyle = '#444'; ctx.font = '30px "Press Start 2P"'; ctx.textAlign = 'center';
           ctx.fillText("?", x + size/2, y + size/2 + 10);
         }
-        
-        ctx.strokeStyle = i === selectedIdx ? '#f00' : (c.locked ? '#444' : '#ffd700'); 
-        ctx.lineWidth = i === selectedIdx ? 6 : (c.locked ? 2 : 4); ctx.strokeRect(x,y,size,size);
+
+        let slotStroke = c.locked ? '#444' : '#ffd700';
+        let slotLineWidth = c.locked ? 2 : 4;
+        if (i === selectedIdx && !isOnlineChar) { slotStroke = '#f00'; slotLineWidth = 6; }
+        else if (i === selectedIdx && isOnlineChar) { slotStroke = isOnlineHostRef.current ? P1_COLOR : P2_COLOR; slotLineWidth = 6; }
+        if (isOnlineChar && room) {
+          if (room.hostChar === String(i)) { slotStroke = P1_COLOR; slotLineWidth = 5; }
+          else if (room.guestChar === String(i)) { slotStroke = P2_COLOR; slotLineWidth = 5; }
+        }
+        ctx.strokeStyle = slotStroke;
+        ctx.lineWidth = slotLineWidth;
+        ctx.strokeRect(x, y, size, size);
+        if (isOnlineChar && room) {
+          ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'center';
+          if (room.hostChar === String(i) && room.hostName) {
+            ctx.fillStyle = P1_COLOR;
+            ctx.fillText(`P1 ${room.hostName}`, x + size/2, y + size - 4);
+          } else if (room.guestChar === String(i) && room.guestName) {
+            ctx.fillStyle = P2_COLOR;
+            ctx.fillText(`P2 ${room.guestName}`, x + size/2, y + size - 4);
+          }
+        }
       });
-      
+
       const currentChar = CHARACTERS[selectedIdx];
       const leftPreviewX = 24; const leftPreviewY = 130; const leftPreviewSize = 140;
       const previewOuter = leftPreviewSize + 8;
@@ -550,7 +665,8 @@ const FighterApp = () => {
         if (idle0 && isValid(idle0)) {
           ctx.fillStyle = '#f0f0f0';
           ctx.fillRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
-          ctx.strokeStyle = currentChar.color; ctx.lineWidth = 3;
+          ctx.strokeStyle = isOnlineChar ? (isOnlineHostRef.current ? P1_COLOR : P2_COLOR) : currentChar.color;
+          ctx.lineWidth = 3;
           ctx.strokeRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
           ctx.drawImage(idle0, leftPreviewX, leftPreviewY, leftPreviewSize, leftPreviewSize);
         }
@@ -562,63 +678,238 @@ const FighterApp = () => {
         ctx.fillStyle = '#444'; ctx.font = '48px "Press Start 2P"'; ctx.textAlign = 'center';
         ctx.fillText("?", leftPreviewX + leftPreviewSize/2, leftPreviewY + leftPreviewSize/2 + 16);
       }
+
       const cardX = 618; const cardY = 95; const cardW = 168; const cardH = 260;
-      ctx.fillStyle = 'rgba(23, 42, 69, 0.95)';
-      ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3;
-      ctx.fillRect(cardX, cardY, cardW, cardH);
-      ctx.strokeRect(cardX, cardY, cardW, cardH);
-      ctx.fillStyle = '#ffd700'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("STATS", cardX + cardW/2, cardY + 28);
-      const stats = CHARACTER_STATS[selectedIdx] ?? { speed: 50, strength: 50, agility: 50 };
-      const barY = (label: string, y: number, value: number) => {
-        ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'left';
-        ctx.fillText(label, cardX + 12, y);
-        const barW = cardW - 24; const barH = 12; const barX = cardX + 12;
-        ctx.fillStyle = '#111'; ctx.fillRect(barX, y + 4, barW, barH);
-        ctx.fillStyle = '#4a9eff';
-        ctx.fillRect(barX, y + 4, (value / 100) * barW, barH);
-        ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.strokeRect(barX, y + 4, barW, barH);
-      };
-      barY("SPEED", cardY + 52, stats.speed);
-      barY("STRENGTH", cardY + 52 + 36, stats.strength);
-      barY("AGILITY", cardY + 52 + 72, stats.agility);
-      ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"'; 
+      if (isOnlineChar && room) {
+        const otherName = isOnlineHostRef.current ? room.guestName : room.hostName;
+        const otherLabel = isOnlineHostRef.current ? 'P2' : 'P1';
+        const otherColor = isOnlineHostRef.current ? P2_COLOR : P1_COLOR;
+        ctx.fillStyle = 'rgba(23, 42, 69, 0.95)';
+        ctx.strokeStyle = otherColor;
+        ctx.lineWidth = 3;
+        ctx.fillRect(cardX, cardY, cardW, cardH);
+        ctx.strokeRect(cardX, cardY, cardW, cardH);
+        const otherConfirmed = isOnlineHostRef.current ? room.guestChar : room.hostChar;
+        const confirmedIdx = otherConfirmed != null ? parseInt(String(otherConfirmed), 10) : null;
+        const cursorIdx = otherPlayerSlotIndexRef.current != null ? Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, otherPlayerSlotIndexRef.current)) : null;
+        const slotIdx = (confirmedIdx != null && !Number.isNaN(confirmedIdx) ? confirmedIdx : cursorIdx);
+        if (slotIdx != null && CHARACTERS[slotIdx] && !CHARACTERS[slotIdx].locked) {
+          const otherChar = CHARACTERS[slotIdx];
+          const otherAnims = anims.current[otherChar.name.toLowerCase()];
+          const idle000 = otherAnims?.idle?.[0];
+          if (idle000 && isValid(idle000)) {
+            const drawW = 140; const drawH = 140;
+            const cx = cardX + cardW / 2;
+            const topY = cardY + 20;
+            ctx.save();
+            ctx.translate(cx, topY + drawH / 2);
+            ctx.scale(-1, 1);
+            ctx.drawImage(idle000, -drawW/2, -drawH/2, drawW, drawH);
+            ctx.restore();
+          }
+        } else {
+          ctx.fillStyle = '#888';
+          ctx.font = '10px "Press Start 2P"';
+          ctx.textAlign = 'center';
+          ctx.fillText(`ESPERANDO A ${otherLabel}...`, cardX + cardW/2, cardY + cardH/2 - 8);
+        }
+        ctx.fillStyle = otherColor;
+        ctx.font = '12px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${otherLabel} ${otherName ?? '...'}`, cardX + cardW/2, cardY + cardH - 20);
+      } else {
+        ctx.fillStyle = 'rgba(23, 42, 69, 0.95)';
+        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3;
+        ctx.fillRect(cardX, cardY, cardW, cardH);
+        ctx.strokeRect(cardX, cardY, cardW, cardH);
+        ctx.fillStyle = '#ffd700'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
+        ctx.fillText("STATS", cardX + cardW/2, cardY + 28);
+        const stats = CHARACTER_STATS[selectedIdx] ?? { speed: 50, strength: 50, agility: 50 };
+        const barY = (label: string, y: number, value: number) => {
+          ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'left';
+          ctx.fillText(label, cardX + 12, y);
+          const barW = cardW - 24; const barH = 12; const barX = cardX + 12;
+          ctx.fillStyle = '#111'; ctx.fillRect(barX, y + 4, barW, barH);
+          ctx.fillStyle = '#4a9eff';
+          ctx.fillRect(barX, y + 4, (value / 100) * barW, barH);
+          ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.strokeRect(barX, y + 4, barW, barH);
+        };
+        barY("SPEED", cardY + 52, stats.speed);
+        barY("STRENGTH", cardY + 52 + 36, stats.strength);
+        barY("AGILITY", cardY + 52 + 72, stats.agility);
+      }
+      ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"';
       ctx.fillStyle = currentChar.locked ? '#444' : currentChar.color;
       ctx.fillText(currentChar.locked ? "LOCKED" : currentChar.name, 200, 380);
       ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 410);
-      
-      frameCounter.current++;
-      if (frameCounter.current > 10) {
-        let changed = false;
-        if (keys.current['ArrowRight']) { setSelectedChar(p => (p + 1) % CHAR_SELECT_SLOTS); changed = true; }
-        else if (keys.current['ArrowLeft']) { setSelectedChar(p => (p - 1 + CHAR_SELECT_SLOTS) % CHAR_SELECT_SLOTS); changed = true; }
-        else if (keys.current['ArrowDown']) { setSelectedChar(p => (p + 4) % CHAR_SELECT_SLOTS); changed = true; }
-        else if (keys.current['ArrowUp']) { setSelectedChar(p => (p - 4 + CHAR_SELECT_SLOTS) % CHAR_SELECT_SLOTS); changed = true; }
-        
-        if (changed) {
-          frameCounter.current = 0;
-          sounds.playSFX('select');
+      if (hasConfirmed) {
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText(isHost ? (otherName ? `ESPERANDO A ${otherName}...` : "ESPERANDO AL OTRO JUGADOR") : "ESPERANDO AL HOST...", CANVAS_WIDTH/2, 410);
+      } else {
+        ctx.fillText("CHOOSE YOUR MAXXITO", CANVAS_WIDTH/2, 410);
+      }
+
+      if (!hasConfirmed) {
+        frameCounter.current++;
+        if (frameCounter.current > 10) {
+          let changed = false;
+          if (keys.current['ArrowRight']) { setSelectedChar(p => (p + 1) % CHAR_SELECT_SLOTS); changed = true; }
+          else if (keys.current['ArrowLeft']) { setSelectedChar(p => (p - 1 + CHAR_SELECT_SLOTS) % CHAR_SELECT_SLOTS); changed = true; }
+          else if (keys.current['ArrowDown']) { setSelectedChar(p => (p + 4) % CHAR_SELECT_SLOTS); changed = true; }
+          else if (keys.current['ArrowUp']) { setSelectedChar(p => (p - 4 + CHAR_SELECT_SLOTS) % CHAR_SELECT_SLOTS); changed = true; }
+
+          if (changed) {
+            frameCounter.current = 0;
+            sounds.playSFX('select');
+          }
+        }
+
+        if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
+          if (!currentChar.locked) {
+            const client = roomClientRef.current;
+            if (client) {
+              client.sendSelectChar(String(selectedIdx));
+              inputCooldownRef.current = 45;
+              sounds.playSFX('select');
+            } else {
+              const candidates = charsInSelect
+                .map((_, i) => i)
+                .filter(i => i !== selectedIdx && !CHARACTERS[i].locked);
+              const cpu = candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
+              setCpuChar(cpu);
+              cpuCharRef.current = cpu;
+              resetMatchState();
+              setGameState('STAGE_SELECT');
+            }
+          }
         }
       }
-      
-      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
-        if (!currentChar.locked) {
-          const candidates = charsInSelect
-            .map((_, i) => i)
-            .filter(i => i !== selectedIdx && !CHARACTERS[i].locked);
-          const cpu = candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
-          setCpuChar(cpu);
-          cpuCharRef.current = cpu;
-          resetMatchState();
-          setGameState('STAGE_SELECT');
+    } else if (state === 'ONLINE_CHARS_READY') {
+      if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
+      const size = 90; const margin = 20; const gridX = (CANVAS_WIDTH - (4*size + 3*margin))/2;
+      const gridTopY = 110;
+      const charsInSelect = CHARACTERS.slice(0, CHAR_SELECT_SLOTS);
+      const mugPad = 5; const mugSize = size - mugPad * 2;
+      const P1_COLOR = '#EF4444';
+      const P2_COLOR = '#4285F4';
+      const room = serverRoomStateRef.current;
+      if (room) {
+        charsInSelect.forEach((c, i) => {
+          const x = gridX + (i % 4) * (size + margin); const y = gridTopY + Math.floor(i / 4) * (size + margin);
+          ctx.fillStyle = c.locked ? '#050a14' : '#172a45';
+          ctx.fillRect(x, y, size, size);
+          if (!c.locked) {
+            const mug = mugshots.current[c.name.toLowerCase()];
+            const mx = x + mugPad; const my = y + mugPad;
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(mx, my, mugSize, mugSize);
+            if (isValid(mug)) {
+              ctx.shadowColor = 'rgba(0,0,0,0.6)';
+              ctx.shadowBlur = 8;
+              ctx.shadowOffsetX = 4;
+              ctx.shadowOffsetY = 4;
+              ctx.drawImage(mug, mx, my, mugSize, mugSize);
+              ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+            }
+          } else {
+            ctx.fillStyle = '#444'; ctx.font = '30px "Press Start 2P"'; ctx.textAlign = 'center';
+            ctx.fillText("?", x + size/2, y + size/2 + 10);
+          }
+          let slotStroke = c.locked ? '#444' : '#ffd700';
+          let slotLineWidth = c.locked ? 2 : 4;
+          if (room.hostChar === String(i)) { slotStroke = P1_COLOR; slotLineWidth = 5; }
+          else if (room.guestChar === String(i)) { slotStroke = P2_COLOR; slotLineWidth = 5; }
+          ctx.strokeStyle = slotStroke;
+          ctx.lineWidth = slotLineWidth;
+          ctx.strokeRect(x, y, size, size);
+          ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'center';
+          if (room.hostChar === String(i) && room.hostName) {
+            ctx.fillStyle = P1_COLOR;
+            ctx.fillText(`P1 ${room.hostName}`, x + size/2, y + size - 4);
+          } else if (room.guestChar === String(i) && room.guestName) {
+            ctx.fillStyle = P2_COLOR;
+            ctx.fillText(`P2 ${room.guestName}`, x + size/2, y + size - 4);
+          }
+        });
+        const leftPreviewX = 24; const leftPreviewY = 130; const leftPreviewSize = 140;
+        const previewOuter = leftPreviewSize + 8;
+        const hostIdx = room.hostChar != null ? parseInt(String(room.hostChar), 10) : 0;
+        const hostChar = CHARACTERS[Number.isNaN(hostIdx) ? 0 : Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, hostIdx))];
+        if (hostChar && !hostChar.locked) {
+          const charAnims = anims.current[hostChar.name.toLowerCase()];
+          const idle0 = charAnims?.idle?.[0];
+          if (idle0 && isValid(idle0)) {
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
+            ctx.strokeStyle = P1_COLOR;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(leftPreviewX - 4, leftPreviewY - 4, previewOuter, previewOuter);
+            ctx.drawImage(idle0, leftPreviewX, leftPreviewY, leftPreviewSize, leftPreviewSize);
+          }
         }
+        ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"';
+        ctx.fillStyle = hostChar?.locked ? '#444' : (hostChar?.color ?? '#ffd700');
+        ctx.fillText(hostChar?.locked ? "LOCKED" : (hostChar?.name ?? "P1"), 200, 380);
+        const cardX = 618; const cardY = 95; const cardW = 168; const cardH = 260;
+        ctx.fillStyle = 'rgba(23, 42, 69, 0.95)';
+        ctx.strokeStyle = P2_COLOR;
+        ctx.lineWidth = 3;
+        ctx.fillRect(cardX, cardY, cardW, cardH);
+        ctx.strokeRect(cardX, cardY, cardW, cardH);
+        const guestIdx = room.guestChar != null ? parseInt(String(room.guestChar), 10) : null;
+        const slotIdx = guestIdx != null && !Number.isNaN(guestIdx) ? Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, guestIdx)) : null;
+        if (slotIdx != null && CHARACTERS[slotIdx] && !CHARACTERS[slotIdx].locked) {
+          const otherChar = CHARACTERS[slotIdx];
+          const otherAnims = anims.current[otherChar.name.toLowerCase()];
+          const idle000 = otherAnims?.idle?.[0];
+          if (idle000 && isValid(idle000)) {
+            const drawW = 140; const drawH = 140;
+            const cx = cardX + cardW / 2;
+            const topY = cardY + 20;
+            ctx.save();
+            ctx.translate(cx, topY + drawH / 2);
+            ctx.scale(-1, 1);
+            ctx.drawImage(idle000, -drawW/2, -drawH/2, drawW, drawH);
+            ctx.restore();
+          }
+        }
+        ctx.fillStyle = P2_COLOR;
+        ctx.font = '12px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText(`P2 ${room.guestName ?? '...'}`, cardX + cardW/2, cardY + cardH - 20);
+      }
+      const panelH = 56;
+      const marginBottom = 24;
+      const panelY = CANVAS_HEIGHT - panelH - marginBottom;
+      ctx.fillStyle = 'rgba(10, 25, 47, 0.95)';
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 4;
+      ctx.fillRect(0, panelY, CANVAS_WIDTH, panelH);
+      ctx.strokeRect(0, panelY, CANVAS_WIDTH, panelH);
+      ctx.fillStyle = '#ffd700';
+      ctx.font = '22px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      const blink = Math.floor(Date.now() / 500) % 2 === 0;
+      if (blink) ctx.fillText("SPACE PARA CONTINUAR", CANVAS_WIDTH/2, panelY + panelH/2 + 8);
+      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
+        sounds.playSFX('select');
+        roomClientRef.current?.sendAdvanceToStageSelect();
+        setGameState('STAGE_SELECT');
       }
     } else if (state === 'STAGE_SELECT') {
       if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
-      ctx.fillStyle = '#fff'; ctx.font = '22px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("SELECT STAGE", CANVAS_WIDTH/2, 410);
+      const isOnlineStage = !!roomClientRef.current;
+      const isHost = isOnlineHostRef.current;
+      ctx.fillStyle = '#fff';
+      ctx.font = '22px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      if (isOnlineStage && !isHost) {
+        ctx.fillText("ESPERANDO AL HOST...", CANVAS_WIDTH/2, 410);
+      } else {
+        ctx.fillText(onlineStageConfirmedRef.current ? "SPACE TO START FIGHT" : "SELECT STAGE", CANVAS_WIDTH/2, 410);
+      }
       const size = 120; const margin = 24; const cols = 3;
       const gridW = cols * size + (cols - 1) * margin;
       const gridX = (CANVAS_WIDTH - gridW) / 2;
@@ -643,30 +934,52 @@ const FighterApp = () => {
       ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"';
       ctx.fillStyle = currentStage.locked ? '#444' : '#ffd700';
       ctx.fillText(currentStage.locked ? "LOCKED" : currentStage.name, 200, 400);
-      frameCounter.current++;
-      if (frameCounter.current > 10) {
-        let changed = false;
-        if (keys.current['ArrowRight']) { setSelectedStage(p => (p + 1) % STAGES.length); changed = true; }
-        else if (keys.current['ArrowLeft']) { setSelectedStage(p => (p - 1 + STAGES.length) % STAGES.length); changed = true; }
-        else if (keys.current['ArrowDown']) { setSelectedStage(p => (p + 3) % STAGES.length); changed = true; }
-        else if (keys.current['ArrowUp']) { setSelectedStage(p => (p - 3 + STAGES.length) % STAGES.length); changed = true; }
-        if (changed) { frameCounter.current = 0; sounds.playSFX('select'); }
-      }
-      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
-        if (!currentStage.locked) {
-          const bg = stageBackgrounds.current[selectedIdx];
-          fightBackground.current = bg && isValid(bg) ? bg : null;
-          initFighters(selectedCharRef.current, cpuCharRef.current);
-          setGameState('FIGHT');
+      if (isOnlineStage && !isHost) {
+        // guest: no input
+      } else {
+        frameCounter.current++;
+        if (frameCounter.current > 10) {
+          let changed = false;
+          if (keys.current['ArrowRight']) { setSelectedStage(p => (p + 1) % STAGES.length); changed = true; }
+          else if (keys.current['ArrowLeft']) { setSelectedStage(p => (p - 1 + STAGES.length) % STAGES.length); changed = true; }
+          else if (keys.current['ArrowDown']) { setSelectedStage(p => (p + 3) % STAGES.length); changed = true; }
+          else if (keys.current['ArrowUp']) { setSelectedStage(p => (p - 3 + STAGES.length) % STAGES.length); changed = true; }
+          if (changed) { frameCounter.current = 0; sounds.playSFX('select'); }
+        }
+        if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
+          if (!currentStage.locked) {
+            const client = roomClientRef.current;
+            if (client && isHost) {
+              if (!onlineStageConfirmedRef.current) {
+                client.sendSelectStage(String(selectedIdx));
+                onlineStageConfirmedRef.current = true;
+                sounds.playSFX('select');
+              } else {
+                client.sendStartFight();
+                sounds.playSFX('select');
+              }
+            } else if (!client) {
+              const bg = stageBackgrounds.current[selectedIdx];
+              fightBackground.current = bg && isValid(bg) ? bg : null;
+              initFighters(selectedCharRef.current, cpuCharRef.current);
+              setGameState('FIGHT');
+            }
+          }
         }
       }
     } else if (state === 'FIGHT') {
       if (isValid(fightBackground.current)) ctx.drawImage(fightBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       else { ctx.fillStyle = '#111'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
 
+      const isOnlineFight = !!roomClientRef.current;
+      const isHost = isOnlineHostRef.current;
+      const runCombat = !isOnlineFight || isHost;
+
       if (playerRef.current && cpuRef.current) {
-        if (!fightPausedRef.current) {
-          updateCombat(playerRef.current, cpuRef.current, false); updateCombat(cpuRef.current, playerRef.current, true);
+        if (runCombat && !fightPausedRef.current) {
+          const p2Control: CombatControl = isOnlineFight && isHost ? 'remote' : 'cpu';
+          updateCombat(playerRef.current, cpuRef.current, 'player');
+          updateCombat(cpuRef.current, playerRef.current, p2Control);
           if (frameCounter.current % 60 === 0 && timer.current > 0 && frameCounter.current >= 120) timer.current--;
           frameCounter.current++;
           if (playerRef.current.hp <= 0 || cpuRef.current.hp <= 0 || timer.current <= 0) {
@@ -676,6 +989,29 @@ const FighterApp = () => {
             if (p1Won) scoreRef.current.p1++; else scoreRef.current.p2++;
             setGameState('ROUND_KO'); frameCounter.current = 0;
           }
+        }
+        if (isOnlineFight && isHost) {
+          const client = roomClientRef.current;
+          if (client) {
+            client.sendStateSync({
+              phase: 'FIGHT',
+              p1: { ...playerRef.current },
+              p2: { ...cpuRef.current },
+              timer: timer.current,
+              score: { ...scoreRef.current },
+              round: roundRef.current,
+              winnerName: winnerNameRef.current,
+              frameCounter: frameCounter.current,
+            });
+          }
+        }
+        if (isOnlineFight && !isHost && roomClientRef.current && frameCounter.current % 2 === 0) {
+          roomClientRef.current.sendInput({
+            left: !!(keys.current['KeyA'] || keys.current['ArrowLeft']),
+            right: !!(keys.current['KeyD'] || keys.current['ArrowRight']),
+            up: !!(keys.current['KeyW'] || keys.current['ArrowUp']),
+            attack: !!(keys.current['Space'] || keys.current['KeyK']),
+          });
         }
         drawFighter(ctx, playerRef.current); drawFighter(ctx, cpuRef.current);
         ctx.fillStyle = '#fff'; ctx.font = '34px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText(timer.current.toString(), CANVAS_WIDTH/2, 65);
@@ -758,6 +1094,18 @@ const FighterApp = () => {
       ctx.shadowBlur = 0;
       if (frameCounter.current === 0) sounds.playBuffer('ko');
       frameCounter.current++;
+      if (roomClientRef.current && isOnlineHostRef.current) {
+        roomClientRef.current.sendStateSync({
+          phase: 'ROUND_KO',
+          p1: playerRef.current ? { ...playerRef.current } : {},
+          p2: cpuRef.current ? { ...cpuRef.current } : {},
+          timer: timer.current,
+          score: { ...scoreRef.current },
+          round: roundRef.current,
+          winnerName: winnerNameRef.current,
+          frameCounter: frameCounter.current,
+        });
+      }
       const koDelayFrames = 120;
       if (frameCounter.current > koDelayFrames) {
         setGameState('ROUND_RESULT'); frameCounter.current = 0;
@@ -767,12 +1115,25 @@ const FighterApp = () => {
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '30px "Press Start 2P"';
       ctx.fillText(`${winnerNameRef.current} WINS ROUND ${roundRef.current}`, CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
       frameCounter.current++;
+      if (roomClientRef.current && isOnlineHostRef.current) {
+        roomClientRef.current.sendStateSync({
+          phase: 'ROUND_RESULT',
+          p1: playerRef.current ? { ...playerRef.current } : {},
+          p2: cpuRef.current ? { ...cpuRef.current } : {},
+          timer: timer.current,
+          score: { ...scoreRef.current },
+          round: roundRef.current,
+          winnerName: winnerNameRef.current,
+          frameCounter: frameCounter.current,
+        });
+      }
       if (frameCounter.current > 120) {
         if (scoreRef.current.p1 >= 2 || scoreRef.current.p2 >= 2) setGameState('GAME_OVER');
-        else { 
-          roundRef.current++; 
-          initFighters(selectedCharRef.current, cpuCharRef.current); 
-          setGameState('FIGHT'); 
+        else {
+          roundRef.current++;
+          if (roomClientRef.current) guestKeysRef.current = {};
+          initFighters(selectedCharRef.current, cpuCharRef.current);
+          setGameState('FIGHT');
         }
         frameCounter.current = 0;
       }
@@ -781,11 +1142,21 @@ const FighterApp = () => {
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '50px "Press Start 2P"'; ctx.fillText("K.O.", CANVAS_WIDTH/2, 180);
       ctx.font = '22px "Press Start 2P"'; ctx.fillText(`${winnerNameRef.current} TOTAL VICTORY`, CANVAS_WIDTH/2, 250);
       ctx.font = '10px "Press Start 2P"'; ctx.fillText("PRESS SPACE TO RETURN TO MENU", CANVAS_WIDTH/2, 350);
-      
-      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) { 
+      if (roomClientRef.current && isOnlineHostRef.current) {
+        roomClientRef.current.sendStateSync({
+          phase: 'GAME_OVER',
+          p1: playerRef.current ? { ...playerRef.current } : {},
+          p2: cpuRef.current ? { ...cpuRef.current } : {},
+          timer: timer.current,
+          score: { ...scoreRef.current },
+          round: roundRef.current,
+          winnerName: winnerNameRef.current,
+        });
+      }
+      if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         sounds.playSFX('select');
-        setGameState('TITLE'); 
-        resetMatchState(); 
+        setGameState('TITLE');
+        resetMatchState();
       }
     } else if (state === 'STOP') {
       ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
@@ -811,7 +1182,112 @@ const FighterApp = () => {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' }}>
       <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
-      {gameState === 'FIGHT' && !fightPaused && (
+      {gameState === 'ONLINE_NAME' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+            background: 'rgba(0,0,0,0.7)',
+          }}
+        >
+          <input
+            type="text"
+            value={onlinePlayerName}
+            onChange={(e) => setOnlinePlayerName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleOnlineSubmit()}
+            placeholder="Tu nombre"
+            maxLength={20}
+            style={{
+              fontFamily: '"Press Start 2P", cursive',
+              fontSize: 12,
+              padding: 10,
+              width: 280,
+              textAlign: 'center',
+              textTransform: 'uppercase',
+            }}
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={handleOnlineSubmit}
+            disabled={!onlinePlayerName.trim()}
+            style={{
+              fontFamily: '"Press Start 2P", cursive',
+              fontSize: 10,
+              padding: 12,
+              background: onlinePlayerName.trim() ? '#172a45' : '#333',
+              color: '#fff',
+              border: '3px solid #ffd700',
+              cursor: onlinePlayerName.trim() ? 'pointer' : 'not-allowed',
+              textTransform: 'uppercase',
+            }}
+          >
+            {isOnlineHostRef.current ? 'Crear desafío' : 'Unirse al desafío'}
+          </button>
+        </div>
+      )}
+      {gameState === 'ONLINE_LINK' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 20,
+            background: 'rgba(0,0,0,0.8)',
+            padding: 24,
+          }}
+        >
+          {challengeLink ? (
+            <>
+              <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 10, color: '#ffd700' }}>LINK DEL DESAFÍO</span>
+              <code
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 10,
+                  color: '#fff',
+                  wordBreak: 'break-all',
+                  maxWidth: '100%',
+                  textAlign: 'center',
+                }}
+              >
+                {challengeLink}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                style={{
+                  fontFamily: '"Press Start 2P", cursive',
+                  fontSize: 10,
+                  padding: 10,
+                  background: '#172a45',
+                  color: '#fff',
+                  border: '2px solid #ffd700',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Copiar link
+              </button>
+            </>
+          ) : null}
+          <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 10, color: '#fff' }}>
+            {serverRoomState?.guestId != null || serverRoomState?.status === 'char_select'
+              ? '¡Listo! (Próximo: selección de personajes)'
+              : isOnlineHostRef.current
+                ? 'Esperando oponente...'
+                : 'Conectado. Esperando al host...'}
+          </span>
+        </div>
+      )}
+      {gameState === 'FIGHT' && !fightPaused && !roomClientRef.current && (
         <button
           type="button"
           onClick={() => setFightPaused(true)}
@@ -826,7 +1302,7 @@ const FighterApp = () => {
           II Pausa
         </button>
       )}
-      {gameState === 'FIGHT' && fightPaused && (
+      {gameState === 'FIGHT' && fightPaused && !roomClientRef.current && (
         <div
           style={{
             position: 'absolute', inset: 0,
