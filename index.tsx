@@ -43,6 +43,20 @@ const CHARACTERS = [
   { id: 9, name: 'DEEPSEEK', color: '#6366F1', locked: true },
 ];
 
+// Stats por personaje (visual en selección; luego se usarán en combate). Valores 0–100.
+const CHARACTER_STATS: { speed: number; strength: number; agility: number }[] = [
+  { speed: 72, strength: 85, agility: 68 },
+  { speed: 68, strength: 78, agility: 88 },
+  { speed: 80, strength: 70, agility: 82 },
+  { speed: 75, strength: 82, agility: 75 },
+  { speed: 65, strength: 90, agility: 60 },
+  { speed: 88, strength: 65, agility: 90 },
+  { speed: 70, strength: 75, agility: 85 },
+  { speed: 82, strength: 72, agility: 78 },
+  { speed: 78, strength: 88, agility: 70 },
+  { speed: 85, strength: 68, agility: 80 },
+];
+
 // --- Audio Engine ---
 class SoundManager {
   private ctx: AudioContext | null = null;
@@ -585,6 +599,38 @@ const FighterApp = () => {
       });
       
       const currentChar = CHARACTERS[selectedIdx];
+      const leftPreviewX = 24; const leftPreviewY = 130; const leftPreviewSize = 140;
+      if (!currentChar.locked) {
+        const charAnims = anims.current[currentChar.name.toLowerCase()];
+        const idle0 = charAnims?.idle?.[0];
+        if (idle0 && isValid(idle0)) {
+          ctx.fillStyle = '#f0f0f0';
+          ctx.fillRect(leftPreviewX - 4, leftPreviewY - 4, leftPreviewSize + 8, leftPreviewSize + 8);
+          ctx.strokeStyle = currentChar.color; ctx.lineWidth = 3;
+          ctx.strokeRect(leftPreviewX - 4, leftPreviewY - 4, leftPreviewSize + 8, leftPreviewSize + 8);
+          ctx.drawImage(idle0, leftPreviewX, leftPreviewY, leftPreviewSize, leftPreviewSize);
+        }
+      }
+      const cardX = 618; const cardY = 95; const cardW = 168; const cardH = 260;
+      ctx.fillStyle = 'rgba(23, 42, 69, 0.95)';
+      ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3;
+      ctx.fillRect(cardX, cardY, cardW, cardH);
+      ctx.strokeRect(cardX, cardY, cardW, cardH);
+      ctx.fillStyle = '#ffd700'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
+      ctx.fillText("STATS", cardX + cardW/2, cardY + 28);
+      const stats = CHARACTER_STATS[selectedIdx] ?? { speed: 50, strength: 50, agility: 50 };
+      const barY = (label: string, y: number, value: number) => {
+        ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'left';
+        ctx.fillText(label, cardX + 12, y);
+        const barW = cardW - 24; const barH = 12; const barX = cardX + 12;
+        ctx.fillStyle = '#111'; ctx.fillRect(barX, y + 4, barW, barH);
+        ctx.fillStyle = '#4a9eff';
+        ctx.fillRect(barX, y + 4, (value / 100) * barW, barH);
+        ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.strokeRect(barX, y + 4, barW, barH);
+      };
+      barY("SPEED", cardY + 52, stats.speed);
+      barY("STRENGTH", cardY + 52 + 36, stats.strength);
+      barY("AGILITY", cardY + 52 + 72, stats.agility);
       ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"'; 
       ctx.fillStyle = currentChar.locked ? '#444' : currentChar.color;
       ctx.fillText(currentChar.locked ? "LOCKED" : currentChar.name, 200, 380);
@@ -819,7 +865,7 @@ const FighterApp = () => {
           type="button"
           onClick={() => setFightPaused(true)}
           style={{
-            position: 'absolute', top: 88, left: '50%', transform: 'translateX(-50%)',
+            position: 'absolute', top: 120, left: '50%', transform: 'translateX(-50%)',
             fontFamily: '"Press Start 2P", cursive',
             fontSize: '10px', padding: '6px 10px',
             background: 'rgba(0,0,0,0.7)', color: '#fff', border: '2px solid #fff',
