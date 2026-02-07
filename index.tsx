@@ -488,9 +488,10 @@ const FighterApp = () => {
     if (!isValid(img)) return;
     ctx.save();
     const cx = f.x + f.width / 2;
-    const cy = f.y + f.height / 2;
+    const cy = GROUND_Y + f.height/4 + f.width/1.5;
     ctx.translate(cx, cy);
-    ctx.rotate(-f.direction * (Math.PI / 2));
+    if (f.direction === -1) ctx.scale(-1, 1);
+    ctx.rotate(-Math.PI / 2);
     ctx.drawImage(img, -f.width/2, -f.height/2, f.width, f.height);
     ctx.restore();
   };
