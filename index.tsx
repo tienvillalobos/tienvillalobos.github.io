@@ -239,12 +239,13 @@ const FighterApp = () => {
 
   useEffect(() => {
     if (gameState !== 'GAME_OVER' || matchRegisteredRef.current) return;
+    const isOnline = !!roomClientRef.current;
+    if (isOnline && !isOnlineHostRef.current) return;
     const p1 = playerRef.current;
     const p2 = cpuRef.current;
     const winnerName = winnerNameRef.current;
     const score = scoreRef.current;
     const room = serverRoomStateRef.current;
-    const isOnline = !!roomClientRef.current;
     const stageIdx = selectedStageRef.current;
     const stageName = STAGES[Math.min(stageIdx, STAGES.length - 1)]?.name ?? null;
 
