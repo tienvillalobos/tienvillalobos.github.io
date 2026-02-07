@@ -69,6 +69,7 @@ const FighterApp = () => {
   const frameCounter = useRef<number>(0);
   const inputCooldownRef = useRef<number>(0);
   const screenShakeRef = useRef<number>(0);
+  const matchRegisteredRef = useRef(false);
 
   // Asset Refs
   const mugshots = useRef<Record<string, HTMLImageElement>>({});
@@ -138,6 +139,7 @@ const FighterApp = () => {
     winnerNameRef.current = null;
     frameCounter.current = 0;
     screenShakeRef.current = 0;
+    matchRegisteredRef.current = false;
   };
 
   const loadAllAssets = async () => {
@@ -230,6 +232,48 @@ const FighterApp = () => {
         roomClientRef.current = null;
       }
     }
+  }, [gameState]);
+
+  const STATS_API_BASE = (import.meta as { env?: { VITE_STATS_API_URL?: string } }).env?.VITE_STATS_API_URL ?? 'https://maxxavelada-backend.onrender.com';
+  const STATS_REGISTER_TIMEOUT_MS = 60000;
+
+  useEffect(() => {
+    if (gameState !== 'GAME_OVER' || matchRegisteredRef.current) return;
+    const p1 = playerRef.current;
+    const p2 = cpuRef.current;
+    const winnerName = winnerNameRef.current;
+    const score = scoreRef.current;
+    const room = serverRoomStateRef.current;
+    const isOnline = !!roomClientRef.current;
+    const stageIdx = selectedStageRef.current;
+    const stageName = STAGES[Math.min(stageIdx, STAGES.length - 1)]?.name ?? null;
+
+    const player1_name = (isOnline && room?.hostName) ? room.hostName : (p1?.name ?? 'P1');
+    const player2_name = (isOnline && room?.guestName) ? room.guestName : (p2?.name ?? 'P2');
+    const winner = (winnerName === p1?.name || winnerName === room?.hostName) ? 'p1' : 'p2';
+
+    matchRegisteredRef.current = true;
+    const payload = {
+      player1_name,
+      player2_name,
+      winner,
+      score_p1: score.p1,
+      score_p2: score.p2,
+      stage: stageName,
+      character_p1: p1?.name ?? null,
+      character_p2: p2?.name ?? null,
+      mode: isOnline ? 'online' : 'local',
+    };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), STATS_REGISTER_TIMEOUT_MS);
+    fetch(`${STATS_API_BASE}/api/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+      .then(() => clearTimeout(timeoutId))
+      .catch(() => clearTimeout(timeoutId));
   }, [gameState]);
 
   // Transición ONLINE_LINK -> CHARACTER_SELECT cuando ambos están y el servidor pasa a char_select
