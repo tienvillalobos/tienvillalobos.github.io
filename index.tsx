@@ -250,7 +250,7 @@ const FighterApp = () => {
     const stageName = STAGES[Math.min(stageIdx, STAGES.length - 1)]?.name ?? null;
 
     const player1_name = (isOnline && room?.hostName) ? room.hostName : (p1?.name ?? 'P1');
-    const player2_name = (isOnline && room?.guestName) ? room.guestName : (p2?.name ?? 'P2');
+    const player2_name = isOnline ? (room?.guestName ?? p2?.name ?? 'P2') : 'CPU';
     const winner = (winnerName === p1?.name || winnerName === room?.hostName) ? 'p1' : 'p2';
 
     matchRegisteredRef.current = true;
@@ -1227,21 +1227,31 @@ const FighterApp = () => {
       else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); }
       const loser = roundLoserRef.current;
       const winner = loser === playerRef.current ? cpuRef.current : playerRef.current;
+      const room = serverRoomStateRef.current;
+      const isOnline = !!roomClientRef.current;
       if (winner && loser) {
         const winX = 120;
         const loseX = 460;
         const origWx = winner.x;
         const origWy = winner.y;
         const origWd = winner.direction;
+        const origWs = winner.state;
+        const origWf = winner.animFrame;
         const origLx = loser.x;
         const origLy = loser.y;
         const origLd = loser.direction;
+        const origLs = loser.state;
+        const origLf = loser.animFrame;
         winner.x = winX;
         winner.y = GROUND_Y;
         winner.direction = 1;
+        winner.state = 'IDLE';
+        winner.animFrame = 0;
         loser.x = loseX;
         loser.y = GROUND_Y;
         loser.direction = -1;
+        loser.state = 'IDLE';
+        loser.animFrame = 0;
         ctx.save();
         ctx.shadowColor = '#ffd700';
         ctx.shadowBlur = 28;
@@ -1255,17 +1265,27 @@ const FighterApp = () => {
         winner.x = origWx;
         winner.y = origWy;
         winner.direction = origWd;
+        winner.state = origWs;
+        winner.animFrame = origWf;
         loser.x = origLx;
         loser.y = origLy;
         loser.direction = origLd;
+        loser.state = origLs;
+        loser.animFrame = origLf;
+        const winnerDisplayName = isOnline && room
+          ? (winner === playerRef.current ? room.hostName : room.guestName) ?? winner.name
+          : winner.name;
+        const loserDisplayName = isOnline && room
+          ? (loser === playerRef.current ? room.hostName : room.guestName) ?? loser.name
+          : 'CPU';
         ctx.font = '16px "Press Start 2P"';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ffd700';
         ctx.shadowColor = '#000';
         ctx.shadowBlur = 4;
-        ctx.fillText('VICTORIA', winX + winner.width / 2, GROUND_Y - 20);
+        ctx.fillText(`VICTORIA  ${winnerDisplayName ?? ''}`, winX + winner.width / 2, GROUND_Y - 20);
         ctx.fillStyle = '#888';
-        ctx.fillText('K.O.', loseX + loser.width / 2, GROUND_Y - 20);
+        ctx.fillText(`K.O.  ${loserDisplayName}`, loseX + loser.width / 2, GROUND_Y - 20);
         ctx.shadowBlur = 0;
       }
       if (roomClientRef.current && isOnlineHostRef.current) {
