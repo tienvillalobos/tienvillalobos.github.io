@@ -90,7 +90,7 @@ const FighterApp = () => {
 
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
       sounds.playMusic('fight');
-    } else if (gameState === 'MODE_SELECT' || gameState === 'ONLINE_LINK' || gameState === 'CHARACTER_SELECT' || gameState === 'ONLINE_CHARS_READY' || gameState === 'STAGE_SELECT') {
+    } else if (gameState === 'MAIN_MENU' || gameState === 'ONLINE_LINK' || gameState === 'CHARACTER_SELECT' || gameState === 'ONLINE_CHARS_READY' || gameState === 'STAGE_SELECT') {
       sounds.playMusic('menu');
       if (gameState === 'CHARACTER_SELECT' && prevState !== 'CHARACTER_SELECT') {
         sounds.playBuffer('menu_voice');
@@ -549,33 +549,68 @@ const FighterApp = () => {
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
         sounds.init();
         sounds.playSFX('select');
-        setGameState('MODE_SELECT');
+        setGameState('MAIN_MENU');
       }
-    } else if (state === 'MODE_SELECT') {
-      if (isValid(homeBackground.current)) {
-        ctx.drawImage(homeBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      } else { ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT); }
-      ctx.fillStyle = '#fff'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
-      ctx.fillText("LOCAL", CANVAS_WIDTH/2, 200);
-      ctx.fillText("ONLINE", CANVAS_WIDTH/2, 260);
+    } else if (state === 'MAIN_MENU') {
+      if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); }
+      const boxW = 320;
+      const boxH = 56;
+      const gap = 20;
+      const totalH = 3 * boxH + 2 * gap;
+      const startY = (CANVAS_HEIGHT - totalH) / 2;
+      const labels = ['Jugador', 'Multijugador', 'HISTORIA'];
+      const faIcons = ['\uF007', '\uF0C0', null];
       const idx = modeSelectIndexRef.current;
-      ctx.fillStyle = '#ffd700';
-      ctx.fillText(idx === 0 ? "> LOCAL" : "> ONLINE", CANVAS_WIDTH/2, idx === 0 ? 200 : 260);
-      ctx.fillStyle = '#888'; ctx.font = '10px "Press Start 2P"';
-      ctx.fillText("ARROWS + SPACE/ENTER", CANVAS_WIDTH/2, 350);
+      const iconSize = 20;
+      const iconGap = 10;
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < 3; i++) {
+        const x = (CANVAS_WIDTH - boxW) / 2;
+        const y = startY + i * (boxH + gap);
+        const isSelected = idx === i;
+        const isLocked = i === 2;
+        ctx.fillStyle = isLocked ? 'rgba(30, 30, 40, 0.95)' : (isSelected ? 'rgba(23, 42, 69, 0.95)' : 'rgba(15, 30, 50, 0.9)');
+        ctx.fillRect(x, y, boxW, boxH);
+        ctx.strokeStyle = isLocked ? '#444' : (isSelected ? '#ffd700' : '#4a6fa5');
+        ctx.lineWidth = isSelected ? 4 : 2;
+        ctx.strokeRect(x, y, boxW, boxH);
+        ctx.fillStyle = isLocked ? '#555' : (isSelected ? '#ffd700' : '#e0e0e0');
+        ctx.font = '14px "Press Start 2P"';
+        const textW = ctx.measureText(labels[i]).width;
+        const iconW = faIcons[i] != null ? iconSize + iconGap : 0;
+        const totalW = iconW + textW;
+        const startX = x + (boxW - totalW) / 2;
+        if (faIcons[i] != null) {
+          ctx.font = `900 ${iconSize}px "Font Awesome 6 Free"`;
+          ctx.fillText(faIcons[i], startX, y + boxH / 2);
+          ctx.font = '14px "Press Start 2P"';
+          ctx.textAlign = 'left';
+          ctx.fillText(labels[i], startX + iconSize + iconGap, y + boxH / 2);
+          ctx.textAlign = 'center';
+        } else {
+          ctx.textAlign = 'center';
+          ctx.fillText(labels[i], x + boxW / 2, y + boxH / 2);
+        }
+      }
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#666';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText("ARROWS + SPACE/ENTER", CANVAS_WIDTH / 2, CANVAS_HEIGHT - 24);
       frameCounter.current++;
       if (frameCounter.current > 10) {
         let changed = false;
-        if (keys.current['ArrowDown']) { setModeSelectIndex(1); changed = true; }
-        else if (keys.current['ArrowUp']) { setModeSelectIndex(0); changed = true; }
+        if (keys.current['ArrowDown']) { setModeSelectIndex((p) => (p + 1) % 3); changed = true; }
+        else if (keys.current['ArrowUp']) { setModeSelectIndex((p) => (p - 1 + 3) % 3); changed = true; }
         if (changed) { frameCounter.current = 0; sounds.playSFX('select'); }
       }
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
-        sounds.playSFX('select');
         if (idx === 0) {
+          sounds.playSFX('select');
           setGameState('CHARACTER_SELECT');
-        } else {
+        } else if (idx === 1) {
+          sounds.playSFX('select');
           const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
           const roomFromUrl = params.get('room');
           if (roomFromUrl) {
@@ -1195,44 +1230,60 @@ const FighterApp = () => {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 16,
-            background: 'rgba(0,0,0,0.7)',
+            backgroundImage: `url(${ASSETS_BASE}/backgrounds/menu.png)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
         >
-          <input
-            type="text"
-            value={onlinePlayerName}
-            onChange={(e) => setOnlinePlayerName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleOnlineSubmit()}
-            placeholder="Tu nombre"
-            maxLength={20}
+          <div
             style={{
-              fontFamily: '"Press Start 2P", cursive',
-              fontSize: 12,
-              padding: 10,
-              width: 280,
-              textAlign: 'center',
-              textTransform: 'uppercase',
-            }}
-            autoFocus
-          />
-          <button
-            type="button"
-            onClick={handleOnlineSubmit}
-            disabled={!onlinePlayerName.trim()}
-            style={{
-              fontFamily: '"Press Start 2P", cursive',
-              fontSize: 10,
-              padding: 12,
-              background: onlinePlayerName.trim() ? '#172a45' : '#333',
-              color: '#fff',
-              border: '3px solid #ffd700',
-              cursor: onlinePlayerName.trim() ? 'pointer' : 'not-allowed',
-              textTransform: 'uppercase',
+              background: 'rgba(10, 25, 47, 0.95)',
+              border: '4px solid #ffd700',
+              borderRadius: 12,
+              padding: 32,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 20,
+              maxWidth: 420,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             }}
           >
-            {isOnlineHostRef.current ? 'Crear desafío' : 'Unirse al desafío'}
-          </button>
+            <input
+              type="text"
+              value={onlinePlayerName}
+              onChange={(e) => setOnlinePlayerName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleOnlineSubmit()}
+              placeholder="Tu nombre"
+              maxLength={20}
+              style={{
+                fontFamily: '"Press Start 2P", cursive',
+                fontSize: 14,
+                padding: 14,
+                width: 300,
+                textAlign: 'center',
+                textTransform: 'uppercase',
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={handleOnlineSubmit}
+              disabled={!onlinePlayerName.trim()}
+              style={{
+                fontFamily: '"Press Start 2P", cursive',
+                fontSize: 12,
+                padding: 14,
+                background: onlinePlayerName.trim() ? '#172a45' : '#333',
+                color: '#fff',
+                border: '3px solid #ffd700',
+                cursor: onlinePlayerName.trim() ? 'pointer' : 'not-allowed',
+                textTransform: 'uppercase',
+              }}
+            >
+              {isOnlineHostRef.current ? 'Crear desafío' : 'Unirse al desafío'}
+            </button>
+          </div>
         </div>
       )}
       {gameState === 'ONLINE_LINK' && (
@@ -1244,51 +1295,67 @@ const FighterApp = () => {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 20,
-            background: 'rgba(0,0,0,0.8)',
-            padding: 24,
+            backgroundImage: `url(${ASSETS_BASE}/backgrounds/menu.png)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
         >
-          {challengeLink ? (
-            <>
-              <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 10, color: '#ffd700' }}>LINK DEL DESAFÍO</span>
-              <code
-                style={{
-                  fontFamily: 'monospace',
-                  fontSize: 10,
-                  color: '#fff',
-                  wordBreak: 'break-all',
-                  maxWidth: '100%',
-                  textAlign: 'center',
-                }}
-              >
-                {challengeLink}
-              </code>
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                style={{
-                  fontFamily: '"Press Start 2P", cursive',
-                  fontSize: 10,
-                  padding: 10,
-                  background: '#172a45',
-                  color: '#fff',
-                  border: '2px solid #ffd700',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Copiar link
-              </button>
-            </>
-          ) : null}
-          <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 10, color: '#fff' }}>
-            {serverRoomState?.guestId != null || serverRoomState?.status === 'char_select'
-              ? '¡Listo! (Próximo: selección de personajes)'
-              : isOnlineHostRef.current
-                ? 'Esperando oponente...'
-                : 'Conectado. Esperando al host...'}
-          </span>
+          <div
+            style={{
+              background: 'rgba(10, 25, 47, 0.95)',
+              border: '4px solid #ffd700',
+              borderRadius: 12,
+              padding: 32,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 24,
+              maxWidth: 520,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            }}
+          >
+            {challengeLink ? (
+              <>
+                <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 14, color: '#ffd700' }}>LINK DEL DESAFÍO</span>
+                <code
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    color: '#fff',
+                    wordBreak: 'break-all',
+                    maxWidth: '100%',
+                    textAlign: 'center',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {challengeLink}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  style={{
+                    fontFamily: '"Press Start 2P", cursive',
+                    fontSize: 12,
+                    padding: 12,
+                    background: '#172a45',
+                    color: '#fff',
+                    border: '3px solid #ffd700',
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Copiar link
+                </button>
+              </>
+            ) : null}
+            <span style={{ fontFamily: '"Press Start 2P", cursive', fontSize: 12, color: '#fff', textAlign: 'center' }}>
+              {serverRoomState?.guestId != null || serverRoomState?.status === 'char_select'
+                ? '¡Listo! (Próximo: selección de personajes)'
+                : isOnlineHostRef.current
+                  ? 'Esperando oponente...'
+                  : 'Conectado. Esperando al host...'}
+            </span>
+          </div>
         </div>
       )}
       {gameState === 'FIGHT' && !fightPaused && !roomClientRef.current && (

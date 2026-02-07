@@ -7,7 +7,7 @@ export type GameState =
   | 'LOADING'
   | 'INTRO'
   | 'TITLE'
-  | 'MODE_SELECT'
+  | 'MAIN_MENU'
   | 'ONLINE_NAME'
   | 'ONLINE_LINK'
   | 'ONLINE_WAITING'
