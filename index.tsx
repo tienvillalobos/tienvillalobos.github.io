@@ -1223,10 +1223,51 @@ const FighterApp = () => {
         frameCounter.current = 0;
       }
     } else if (state === 'GAME_OVER') {
-      ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '50px "Press Start 2P"'; ctx.fillText("K.O.", CANVAS_WIDTH/2, 180);
-      ctx.font = '22px "Press Start 2P"'; ctx.fillText(`${winnerNameRef.current} TOTAL VICTORY`, CANVAS_WIDTH/2, 250);
-      ctx.font = '10px "Press Start 2P"'; ctx.fillText("PRESS SPACE TO RETURN TO MENU", CANVAS_WIDTH/2, 350);
+      if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); }
+      const loser = roundLoserRef.current;
+      const winner = loser === playerRef.current ? cpuRef.current : playerRef.current;
+      if (winner && loser) {
+        const winX = 120;
+        const loseX = 460;
+        const origWx = winner.x;
+        const origWy = winner.y;
+        const origWd = winner.direction;
+        const origLx = loser.x;
+        const origLy = loser.y;
+        const origLd = loser.direction;
+        winner.x = winX;
+        winner.y = GROUND_Y;
+        winner.direction = 1;
+        loser.x = loseX;
+        loser.y = GROUND_Y;
+        loser.direction = -1;
+        ctx.save();
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 28;
+        drawFighter(ctx, winner);
+        ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.filter = 'saturate(0.6) brightness(0.85)';
+        drawFighter(ctx, loser);
+        ctx.restore();
+        winner.x = origWx;
+        winner.y = origWy;
+        winner.direction = origWd;
+        loser.x = origLx;
+        loser.y = origLy;
+        loser.direction = origLd;
+        ctx.font = '16px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 4;
+        ctx.fillText('VICTORIA', winX + winner.width / 2, GROUND_Y - 20);
+        ctx.fillStyle = '#888';
+        ctx.fillText('K.O.', loseX + loser.width / 2, GROUND_Y - 20);
+        ctx.shadowBlur = 0;
+      }
       if (roomClientRef.current && isOnlineHostRef.current) {
         roomClientRef.current.sendStateSync({
           phase: 'GAME_OVER',
@@ -1452,6 +1493,40 @@ const FighterApp = () => {
             }}
           >
             Volver al menu de personajes
+          </button>
+        </div>
+      )}
+      {gameState === 'GAME_OVER' && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            paddingBottom: 32,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              sounds.playSFX('select');
+              setGameState('TITLE');
+              resetMatchState();
+            }}
+            style={{
+              fontFamily: '"Press Start 2P", cursive',
+              fontSize: '12px',
+              padding: '14px 24px',
+              background: 'rgba(23, 42, 69, 0.95)',
+              color: '#ffd700',
+              border: '3px solid #ffd700',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            Volver al menú
           </button>
         </div>
       )}
