@@ -1225,67 +1225,89 @@ const FighterApp = () => {
     } else if (state === 'GAME_OVER') {
       if (isValid(menuBackground.current)) ctx.drawImage(menuBackground.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       else { ctx.fillStyle = '#0a192f'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); }
-      const loser = roundLoserRef.current;
-      const winner = loser === playerRef.current ? cpuRef.current : playerRef.current;
+      const p1 = playerRef.current;
+      const p2 = cpuRef.current;
       const room = serverRoomStateRef.current;
       const isOnline = !!roomClientRef.current;
-      if (winner && loser) {
-        const winX = 120;
-        const loseX = 460;
-        const origWx = winner.x;
-        const origWy = winner.y;
-        const origWd = winner.direction;
-        const origWs = winner.state;
-        const origWf = winner.animFrame;
-        const origLx = loser.x;
-        const origLy = loser.y;
-        const origLd = loser.direction;
-        const origLs = loser.state;
-        const origLf = loser.animFrame;
-        winner.x = winX;
-        winner.y = GROUND_Y;
-        winner.direction = 1;
-        winner.state = 'IDLE';
-        winner.animFrame = 0;
-        loser.x = loseX;
-        loser.y = GROUND_Y;
-        loser.direction = -1;
-        loser.state = 'IDLE';
-        loser.animFrame = 0;
-        ctx.save();
-        ctx.shadowColor = '#ffd700';
-        ctx.shadowBlur = 28;
-        drawFighter(ctx, winner);
-        ctx.restore();
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.filter = 'saturate(0.6) brightness(0.85)';
-        drawFighter(ctx, loser);
-        ctx.restore();
-        winner.x = origWx;
-        winner.y = origWy;
-        winner.direction = origWd;
-        winner.state = origWs;
-        winner.animFrame = origWf;
-        loser.x = origLx;
-        loser.y = origLy;
-        loser.direction = origLd;
-        loser.state = origLs;
-        loser.animFrame = origLf;
-        const winnerDisplayName = isOnline && room
-          ? (winner === playerRef.current ? room.hostName : room.guestName) ?? winner.name
-          : winner.name;
-        const loserDisplayName = isOnline && room
-          ? (loser === playerRef.current ? room.hostName : room.guestName) ?? loser.name
-          : 'CPU';
+      const isHost = isOnlineHostRef.current;
+      const winnerName = winnerNameRef.current;
+      const p1Won = winnerName === p1?.name;
+      const p2Won = winnerName === p2?.name;
+      const leftX = 120;
+      const rightX = 460;
+      const hostName = (isOnline && room?.hostName) ? room.hostName : (p1?.name ?? 'P1');
+      const guestName = (isOnline && room?.guestName) ? room.guestName : 'CPU';
+      const leftChar = isOnline && !isHost ? p2 : p1;
+      const rightChar = isOnline && !isHost ? p1 : p2;
+      const leftWon = isOnline && !isHost ? p2Won : p1Won;
+      const rightWon = isOnline && !isHost ? p1Won : p2Won;
+      const leftLabel = isOnline && !isHost ? guestName : hostName;
+      const rightLabel = isOnline && !isHost ? hostName : guestName;
+      if (p1 && p2) {
+        const origP1x = p1.x;
+        const origP1y = p1.y;
+        const origP1d = p1.direction;
+        const origP1s = p1.state;
+        const origP1f = p1.animFrame;
+        const origP2x = p2.x;
+        const origP2y = p2.y;
+        const origP2d = p2.direction;
+        const origP2s = p2.state;
+        const origP2f = p2.animFrame;
+        leftChar.x = leftX;
+        leftChar.y = GROUND_Y;
+        leftChar.direction = 1;
+        leftChar.state = 'IDLE';
+        leftChar.animFrame = 0;
+        rightChar.x = rightX;
+        rightChar.y = GROUND_Y;
+        rightChar.direction = -1;
+        rightChar.state = 'IDLE';
+        rightChar.animFrame = 0;
+        if (leftWon) {
+          ctx.save();
+          ctx.shadowColor = '#ffd700';
+          ctx.shadowBlur = 28;
+          drawFighter(ctx, leftChar);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.globalAlpha = 0.5;
+          ctx.filter = 'saturate(0.6) brightness(0.85)';
+          drawFighter(ctx, leftChar);
+          ctx.restore();
+        }
+        if (rightWon) {
+          ctx.save();
+          ctx.shadowColor = '#ffd700';
+          ctx.shadowBlur = 28;
+          drawFighter(ctx, rightChar);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.globalAlpha = 0.5;
+          ctx.filter = 'saturate(0.6) brightness(0.85)';
+          drawFighter(ctx, rightChar);
+          ctx.restore();
+        }
+        p1.x = origP1x;
+        p1.y = origP1y;
+        p1.direction = origP1d;
+        p1.state = origP1s;
+        p1.animFrame = origP1f;
+        p2.x = origP2x;
+        p2.y = origP2y;
+        p2.direction = origP2d;
+        p2.state = origP2s;
+        p2.animFrame = origP2f;
         ctx.font = '16px "Press Start 2P"';
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffd700';
         ctx.shadowColor = '#000';
         ctx.shadowBlur = 4;
-        ctx.fillText(`VICTORIA  ${winnerDisplayName ?? ''}`, winX + winner.width / 2, GROUND_Y - 20);
-        ctx.fillStyle = '#888';
-        ctx.fillText(`K.O.  ${loserDisplayName}`, loseX + loser.width / 2, GROUND_Y - 20);
+        ctx.fillStyle = leftWon ? '#ffd700' : '#888';
+        ctx.fillText(`${leftWon ? 'VICTORIA' : 'K.O.'}  ${leftLabel}`, leftX + leftChar.width / 2, GROUND_Y - 20);
+        ctx.fillStyle = rightWon ? '#ffd700' : '#888';
+        ctx.fillText(`${rightWon ? 'VICTORIA' : 'K.O.'}  ${rightLabel}`, rightX + rightChar.width / 2, GROUND_Y - 20);
         ctx.shadowBlur = 0;
       }
       if (roomClientRef.current && isOnlineHostRef.current) {
