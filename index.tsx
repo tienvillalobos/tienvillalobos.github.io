@@ -603,15 +603,16 @@ const FighterApp = () => {
       const boxW = 320;
       const boxH = 56;
       const gap = 20;
-      const totalH = 3 * boxH + 2 * gap;
+      const totalH = 4 * boxH + 3 * gap;
       const startY = (CANVAS_HEIGHT - totalH) / 2;
-      const labels = ['Jugador', 'Multijugador', 'HISTORIA'];
-      const faIcons = ['\uF007', '\uF0C0', null];
+      const labels = ['Jugador', 'Multijugador', 'HISTORIA', 'Leaderboard'];
+      const faIcons = ['\uF007', '\uF0C0', null, '\uF091'];
       const idx = modeSelectIndexRef.current;
       const iconSize = 20;
       const iconGap = 10;
+      const LEADERBOARD_URL = 'https://maxxavelada-backend.onrender.com/leaderboard';
       ctx.textBaseline = 'middle';
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const x = (CANVAS_WIDTH - boxW) / 2;
         const y = startY + i * (boxH + gap);
         const isSelected = idx === i;
@@ -647,8 +648,8 @@ const FighterApp = () => {
       frameCounter.current++;
       if (frameCounter.current > 10) {
         let changed = false;
-        if (keys.current['ArrowDown']) { setModeSelectIndex((p) => (p + 1) % 3); changed = true; }
-        else if (keys.current['ArrowUp']) { setModeSelectIndex((p) => (p - 1 + 3) % 3); changed = true; }
+        if (keys.current['ArrowDown']) { setModeSelectIndex((p) => (p + 1) % 4); changed = true; }
+        else if (keys.current['ArrowUp']) { setModeSelectIndex((p) => (p - 1 + 4) % 4); changed = true; }
         if (changed) { frameCounter.current = 0; sounds.playSFX('select'); }
       }
       if (inputCooldownRef.current === 0 && (keys.current['Space'] || keys.current['Enter'])) {
@@ -669,6 +670,9 @@ const FighterApp = () => {
             setServerRoomState(null);
             setGameState('ONLINE_NAME');
           }
+        } else if (idx === 3) {
+          sounds.playSFX('select');
+          if (typeof window !== 'undefined') window.open(LEADERBOARD_URL, '_blank', 'noopener,noreferrer');
         }
       }
     } else if (state === 'ONLINE_NAME' || state === 'ONLINE_LINK') {
