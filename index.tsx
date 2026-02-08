@@ -604,7 +604,7 @@ const FighterApp = () => {
       const boxH = 56;
       const gap = 20;
       const totalH = 4 * boxH + 3 * gap;
-      const startY = (CANVAS_HEIGHT - totalH) / 2;
+      const startY = (CANVAS_HEIGHT - totalH) / 2 + 45;
       const labels = ['Jugador', 'Multijugador', 'HISTORIA', 'Leaderboard'];
       const faIcons = ['\uF007', '\uF0C0', null, '\uF091'];
       const idx = modeSelectIndexRef.current;
