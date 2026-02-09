@@ -50,7 +50,7 @@ export const CHARACTER_STATS: CharacterCombatStats[] = [
   { attack: 1.12, agility: 0.92, stamina: 1.0   },  // David: más ataque, menos agilidad
   { attack: 0.92, agility: 1.0,  stamina: 1.15  },  // Jostin: menos ataque, más stamina
   { attack: 0.92, agility: 1.12, stamina: 1.0   },  // Manu: menos ataque, más agilidad
-  { attack: 1.38, agility: 0.82, stamina: 0.82  },  // Diego Plaza: mucho ataque, menos agilidad y stamina
+  { attack: 1.58, agility: 0.68, stamina: 0.82  },  // Diego Plaza: mucho más daño, más lento, menos stamina
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
