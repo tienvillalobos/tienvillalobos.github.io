@@ -133,6 +133,11 @@ const FighterApp = () => {
     return !!(img && img.complete && img.naturalWidth > 0);
   };
 
+  const getCharKey = (charId: number): string => {
+    const c = CHARACTERS[charId];
+    return c ? (c.assetKey ?? c.name.toLowerCase().replace(/\s+/g, '_')) : 'eric';
+  };
+
   const resetMatchState = () => {
     scoreRef.current = { p1: 0, p2: 0 };
     roundRef.current = 1;
@@ -159,7 +164,7 @@ const FighterApp = () => {
 
       const totalFrames = 36;
       const categories = ['idle', 'walk', 'attack'];
-      const playableChars = ['eric', 'david', 'jostin', 'manu'];
+      const playableChars = CHARACTERS.filter(c => !c.locked).map(c => c.assetKey ?? c.name.toLowerCase().replace(/\s+/g, '_'));
       const totalToLoad = (playableChars.length * 3 * 36) + playableChars.length + 5;
       let loadedCount = 0;
 
@@ -415,16 +420,20 @@ const FighterApp = () => {
   };
 
   const initFighters = (pIdx: number, cIdx: number) => {
+    const pStats = CHARACTER_STATS[pIdx] ?? { attack: 1, agility: 1, stamina: 1 };
+    const cStats = CHARACTER_STATS[cIdx] ?? { attack: 1, agility: 1, stamina: 1 };
+    const pMaxStamina = Math.round(STAMINA_MAX * pStats.stamina);
+    const cMaxStamina = Math.round(STAMINA_MAX * cStats.stamina);
     playerRef.current = {
       x: 100, y: GROUND_Y, width: 220, height: 220, hp: 100, maxHp: 100,
       direction: 1, state: 'IDLE', animFrame: 0, animTimer: 0,
-      velocityX: 0, velocityY: 0, isAttacking: false, stamina: STAMINA_MAX, maxStamina: STAMINA_MAX,
+      velocityX: 0, velocityY: 0, isAttacking: false, stamina: pMaxStamina, maxStamina: pMaxStamina,
       color: CHARACTERS[pIdx].color, name: CHARACTERS[pIdx].name, charId: pIdx
     };
     cpuRef.current = {
       x: 480, y: GROUND_Y, width: 220, height: 220, hp: 100, maxHp: 100,
       direction: -1, state: 'IDLE', animFrame: 0, animTimer: 0,
-      velocityX: 0, velocityY: 0, isAttacking: false, stamina: STAMINA_MAX, maxStamina: STAMINA_MAX,
+      velocityX: 0, velocityY: 0, isAttacking: false, stamina: cMaxStamina, maxStamina: cMaxStamina,
       color: CHARACTERS[cIdx].color, name: CHARACTERS[cIdx].name, charId: cIdx
     };
     timer.current = 99;
@@ -439,6 +448,13 @@ const FighterApp = () => {
     if (f.y < GROUND_Y) { f.velocityY += 0.9; f.state = 'JUMP'; }
     else { f.y = GROUND_Y; f.velocityY = 0; if (f.state === 'JUMP') f.state = 'IDLE'; }
 
+    const fStats = CHARACTER_STATS[f.charId] ?? { attack: 1, agility: 1, stamina: 1 };
+    const walkSpeed = 4 * fStats.agility;
+    const cpuWalkSpeed = 2.5 * fStats.agility;
+    const jumpPower = 15 * fStats.agility;
+    const staminaCost = Math.max(8, Math.round(STAMINA_COST / fStats.stamina));
+    const staminaRegen = STAMINA_REGEN * fStats.stamina;
+
     const canAct = frameCounter.current >= 120;
     const isPlayer = control === 'player';
     const isCpu = control === 'cpu';
@@ -447,24 +463,24 @@ const FighterApp = () => {
 
     if (isPlayer && canAct) {
       if (!f.isAttacking && f.state !== 'HIT') {
-        if (keys.current['KeyA'] || keys.current['ArrowLeft']) { f.velocityX = -4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = -1; }
-        else if (keys.current['KeyD'] || keys.current['ArrowRight']) { f.velocityX = 4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
+        if (keys.current['KeyA'] || keys.current['ArrowLeft']) { f.velocityX = -walkSpeed; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = -1; }
+        else if (keys.current['KeyD'] || keys.current['ArrowRight']) { f.velocityX = walkSpeed; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
         else { f.velocityX = 0; if (f.y === GROUND_Y) f.state = 'IDLE'; }
-        if ((keys.current['KeyW'] || keys.current['ArrowUp']) && f.y === GROUND_Y) f.velocityY = -15;
-        if ((keys.current['Space'] || keys.current['KeyK']) && f.stamina >= STAMINA_COST) {
-          f.stamina -= STAMINA_COST;
+        if ((keys.current['KeyW'] || keys.current['ArrowUp']) && f.y === GROUND_Y) f.velocityY = -jumpPower;
+        if ((keys.current['Space'] || keys.current['KeyK']) && f.stamina >= staminaCost) {
+          f.stamina -= staminaCost;
           f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0;
           sounds.playSFX('attack');
         }
       }
     } else if (isRemote && canAct) {
       if (!f.isAttacking && f.state !== 'HIT') {
-        if (remoteKeys.left) { f.velocityX = -4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = -1; }
-        else if (remoteKeys.right) { f.velocityX = 4; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
+        if (remoteKeys.left) { f.velocityX = -walkSpeed; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = -1; }
+        else if (remoteKeys.right) { f.velocityX = walkSpeed; f.state = f.y === GROUND_Y ? 'WALK' : 'JUMP'; f.direction = 1; }
         else { f.velocityX = 0; if (f.y === GROUND_Y) f.state = 'IDLE'; }
-        if (remoteKeys.up && f.y === GROUND_Y) f.velocityY = -15;
-        if (remoteKeys.attack && f.stamina >= STAMINA_COST) {
-          f.stamina -= STAMINA_COST;
+        if (remoteKeys.up && f.y === GROUND_Y) f.velocityY = -jumpPower;
+        if (remoteKeys.attack && f.stamina >= staminaCost) {
+          f.stamina -= staminaCost;
           f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0;
           sounds.playSFX('attack');
         }
@@ -472,8 +488,8 @@ const FighterApp = () => {
     } else if (isCpu && canAct) {
       const dist = Math.abs(f.x - opp.x);
       if (!f.isAttacking && f.state !== 'HIT') {
-        if (dist > 180) { f.velocityX = f.x < opp.x ? 2.5 : -2.5; f.direction = f.x < opp.x ? 1 : -1; f.state = 'WALK'; }
-        else { f.velocityX = 0; f.state = 'IDLE'; if (Math.random() < 0.05 && f.stamina >= STAMINA_COST) { f.stamina -= STAMINA_COST; f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0; sounds.playSFX('attack'); } }
+        if (dist > 180) { f.velocityX = f.x < opp.x ? cpuWalkSpeed : -cpuWalkSpeed; f.direction = f.x < opp.x ? 1 : -1; f.state = 'WALK'; }
+        else { f.velocityX = 0; f.state = 'IDLE'; if (Math.random() < 0.05 && f.stamina >= staminaCost) { f.stamina -= staminaCost; f.isAttacking = true; f.state = 'ATTACK'; f.animFrame = 0; sounds.playSFX('attack'); } }
       }
     } else { f.velocityX = 0; }
 
@@ -482,13 +498,16 @@ const FighterApp = () => {
     f.animTimer++;
     if (f.animTimer >= (f.state === 'ATTACK' ? 1 : 2)) { f.animFrame++; f.animTimer = 0; }
 
+    const baseDamage = 10;
+    const hitDamage = Math.max(1, Math.round(baseDamage * fStats.attack));
+
     if (f.isAttacking) {
       if (f.animFrame >= 36) { f.isAttacking = false; f.state = 'IDLE'; f.animFrame = 0; }
       if (f.animFrame >= 15 && f.animFrame <= 25 && f.animTimer === 0) {
         const hitX = f.direction === 1 ? f.x + f.width - 90 : f.x + 40;
         if (hitX < opp.x + opp.width - 60 && hitX + 50 > opp.x + 60 && f.y < opp.y + opp.height && f.y + 120 > opp.y) {
           if (opp.state !== 'HIT') { 
-            opp.hp -= 10; opp.state = 'HIT'; opp.animFrame = 0; opp.velocityX = f.direction * 8; 
+            opp.hp -= hitDamage; opp.state = 'HIT'; opp.animFrame = 0; opp.velocityX = f.direction * 8; 
             screenShakeRef.current = 10;
             sounds.playSFX('hit');
           }
@@ -498,7 +517,7 @@ const FighterApp = () => {
     else { if (f.animFrame >= 36) f.animFrame = 0; }
     // Regenerar stamina (no mientras ataca)
     if (!f.isAttacking && f.stamina < f.maxStamina) {
-      f.stamina = Math.min(f.maxStamina, f.stamina + STAMINA_REGEN);
+      f.stamina = Math.min(f.maxStamina, f.stamina + staminaRegen);
     }
   };
 
@@ -506,8 +525,8 @@ const FighterApp = () => {
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(f.x + f.width/2, f.y + f.height - 5, f.width/3, 6, 0, 0, Math.PI*2); ctx.fill();
     
-    const charName = f.name.toLowerCase();
-    const charAnims = anims.current[charName];
+    const charKey = getCharKey(f.charId);
+    const charAnims = anims.current[charKey];
     if (!charAnims) { ctx.restore(); return; }
 
     let frames = charAnims.idle;
@@ -525,8 +544,8 @@ const FighterApp = () => {
   };
 
   const drawFighterFallen = (ctx: CanvasRenderingContext2D, f: Fighter) => {
-    const charName = f.name.toLowerCase();
-    const charAnims = anims.current[charName];
+    const charKey = getCharKey(f.charId);
+    const charAnims = anims.current[charKey];
     if (!charAnims) return;
     const frames = charAnims.idle;
     const img = frames[f.animFrame % frames.length];
@@ -705,7 +724,7 @@ const FighterApp = () => {
         ctx.fillRect(x, y, size, size);
 
         if (!c.locked) {
-          const mug = mugshots.current[c.name.toLowerCase()];
+          const mug = mugshots.current[getCharKey(c.id)];
           const mx = x + mugPad; const my = y + mugPad;
           ctx.fillStyle = '#f0f0f0';
           ctx.fillRect(mx, my, mugSize, mugSize);
@@ -749,7 +768,7 @@ const FighterApp = () => {
       const leftPreviewX = 24; const leftPreviewY = 130; const leftPreviewSize = 140;
       const previewOuter = leftPreviewSize + 8;
       if (!currentChar.locked) {
-        const charAnims = anims.current[currentChar.name.toLowerCase()];
+        const charAnims = anims.current[getCharKey(selectedIdx)];
         const idle0 = charAnims?.idle?.[0];
         if (idle0 && isValid(idle0)) {
           ctx.fillStyle = '#f0f0f0';
@@ -784,7 +803,7 @@ const FighterApp = () => {
         const slotIdx = (confirmedIdx != null && !Number.isNaN(confirmedIdx) ? confirmedIdx : cursorIdx);
         if (slotIdx != null && CHARACTERS[slotIdx] && !CHARACTERS[slotIdx].locked) {
           const otherChar = CHARACTERS[slotIdx];
-          const otherAnims = anims.current[otherChar.name.toLowerCase()];
+          const otherAnims = anims.current[getCharKey(slotIdx)];
           const idle000 = otherAnims?.idle?.[0];
           if (idle000 && isValid(idle000)) {
             const drawW = 140; const drawH = 140;
@@ -813,7 +832,8 @@ const FighterApp = () => {
         ctx.strokeRect(cardX, cardY, cardW, cardH);
         ctx.fillStyle = '#ffd700'; ctx.font = '14px "Press Start 2P"'; ctx.textAlign = 'center';
         ctx.fillText("STATS", cardX + cardW/2, cardY + 28);
-        const stats = CHARACTER_STATS[selectedIdx] ?? { speed: 50, strength: 50, agility: 50 };
+        const stats = CHARACTER_STATS[selectedIdx] ?? { attack: 1, agility: 1, stamina: 1 };
+        const toBar = (v: number) => Math.min(100, Math.max(0, Math.round(v * 72)));
         const barY = (label: string, y: number, value: number) => {
           ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'left';
           ctx.fillText(label, cardX + 12, y);
@@ -823,9 +843,9 @@ const FighterApp = () => {
           ctx.fillRect(barX, y + 4, (value / 100) * barW, barH);
           ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.strokeRect(barX, y + 4, barW, barH);
         };
-        barY("SPEED", cardY + 52, stats.speed);
-        barY("STRENGTH", cardY + 52 + 36, stats.strength);
-        barY("AGILITY", cardY + 52 + 72, stats.agility);
+        barY("ATAQUE", cardY + 52, toBar(stats.attack));
+        barY("AGILIDAD", cardY + 52 + 36, toBar(stats.agility));
+        barY("STAMINA", cardY + 52 + 72, toBar(stats.stamina));
       }
       ctx.textAlign = 'left'; ctx.font = '30px "Press Start 2P"';
       ctx.fillStyle = currentChar.locked ? '#444' : currentChar.color;
@@ -889,7 +909,7 @@ const FighterApp = () => {
           ctx.fillStyle = c.locked ? '#050a14' : '#172a45';
           ctx.fillRect(x, y, size, size);
           if (!c.locked) {
-            const mug = mugshots.current[c.name.toLowerCase()];
+            const mug = mugshots.current[getCharKey(c.id)];
             const mx = x + mugPad; const my = y + mugPad;
             ctx.fillStyle = '#f0f0f0';
             ctx.fillRect(mx, my, mugSize, mugSize);
@@ -926,7 +946,7 @@ const FighterApp = () => {
         const hostIdx = room.hostChar != null ? parseInt(String(room.hostChar), 10) : 0;
         const hostChar = CHARACTERS[Number.isNaN(hostIdx) ? 0 : Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, hostIdx))];
         if (hostChar && !hostChar.locked) {
-          const charAnims = anims.current[hostChar.name.toLowerCase()];
+          const charAnims = anims.current[getCharKey(Number.isNaN(hostIdx) ? 0 : Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, hostIdx)))];
           const idle0 = charAnims?.idle?.[0];
           if (idle0 && isValid(idle0)) {
             ctx.fillStyle = '#f0f0f0';
@@ -950,7 +970,7 @@ const FighterApp = () => {
         const slotIdx = guestIdx != null && !Number.isNaN(guestIdx) ? Math.min(CHAR_SELECT_SLOTS - 1, Math.max(0, guestIdx)) : null;
         if (slotIdx != null && CHARACTERS[slotIdx] && !CHARACTERS[slotIdx].locked) {
           const otherChar = CHARACTERS[slotIdx];
-          const otherAnims = anims.current[otherChar.name.toLowerCase()];
+          const otherAnims = anims.current[getCharKey(slotIdx)];
           const idle000 = otherAnims?.idle?.[0];
           if (idle000 && isValid(idle000)) {
             const drawW = 140; const drawH = 140;
