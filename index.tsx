@@ -507,7 +507,7 @@ const FighterApp = () => {
         const hitX = f.direction === 1 ? f.x + f.width - 90 : f.x + 40;
         if (hitX < opp.x + opp.width - 60 && hitX + 50 > opp.x + 60 && f.y < opp.y + opp.height && f.y + 120 > opp.y) {
           if (opp.state !== 'HIT') { 
-            opp.hp -= hitDamage; opp.state = 'HIT'; opp.animFrame = 0; opp.velocityX = f.direction * 8; 
+            opp.hp = Math.max(0, opp.hp - hitDamage); opp.state = 'HIT'; opp.animFrame = 0; opp.velocityX = f.direction * 8; 
             screenShakeRef.current = 10;
             sounds.playSFX('hit');
           }
@@ -1129,7 +1129,8 @@ const FighterApp = () => {
           const totalH = barH * 2 + gap;
           ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x - 2, 40 - 2, w + 4, totalH + 4);
           ctx.fillStyle = '#000'; ctx.fillRect(x, 40, w, barH); ctx.fillRect(x, stamY, w, barH);
-          const hpW = (f.hp / f.maxHp) * w; const stamW = (f.stamina / f.maxStamina) * w;
+          const hpRatio = Math.max(0, Math.min(1, f.hp / f.maxHp)); const stamRatio = Math.max(0, Math.min(1, f.stamina / f.maxStamina));
+          const hpW = hpRatio * w; const stamW = stamRatio * w;
           ctx.fillStyle = f.hp > 30 ? '#00FF00' : '#FF0000';
           if (align === 'L') { 
             ctx.fillRect(x, 40, hpW, barH); 
@@ -1172,7 +1173,8 @@ const FighterApp = () => {
         const totalH = barH * 2 + gap;
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x - 2, 40 - 2, w + 4, totalH + 4);
         ctx.fillStyle = '#000'; ctx.fillRect(x, 40, w, barH); ctx.fillRect(x, stamY, w, barH);
-        const hpW = (f.hp / f.maxHp) * w; const stamW = (f.stamina / f.maxStamina) * w;
+        const hpRatio = Math.max(0, Math.min(1, f.hp / f.maxHp)); const stamRatio = Math.max(0, Math.min(1, f.stamina / f.maxStamina));
+        const hpW = hpRatio * w; const stamW = stamRatio * w;
         ctx.fillStyle = f.hp > 30 ? '#00FF00' : '#FF0000';
         if (align === 'L') {
           ctx.fillRect(x, 40, hpW, barH);
