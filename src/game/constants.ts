@@ -30,12 +30,13 @@ export const CHARACTERS: { id: number; name: string; color: string; locked: bool
   { id: 2, name: 'JOSTIN', color: '#22C55E', locked: false },
   { id: 3, name: 'MANU', color: '#E879F9', locked: false },
   { id: 4, name: 'DIEGO PLAZA', color: '#F59E0B', locked: false, assetKey: 'diego_plaza' },
-  { id: 5, name: 'CLAUDE', color: '#D97757', locked: true },
-  { id: 6, name: 'GPT-4', color: '#10A37F', locked: true },
-  { id: 7, name: 'LLAMA', color: '#0668E1', locked: true },
-  { id: 8, name: 'MISTRAL', color: '#FCD34D', locked: true },
-  { id: 9, name: 'GROK', color: '#FFFFFF', locked: true },
-  { id: 10, name: 'DEEPSEEK', color: '#6366F1', locked: true },
+  { id: 5, name: 'BRUNO', color: '#06B6D4', locked: false, assetKey: 'bruno' },
+  { id: 6, name: 'CLAUDE', color: '#D97757', locked: true },
+  { id: 7, name: 'GPT-4', color: '#10A37F', locked: true },
+  { id: 8, name: 'LLAMA', color: '#0668E1', locked: true },
+  { id: 9, name: 'MISTRAL', color: '#FCD34D', locked: true },
+  { id: 10, name: 'GROK', color: '#FFFFFF', locked: true },
+  { id: 11, name: 'DEEPSEEK', color: '#6366F1', locked: true },
 ];
 
 /** Multiplicadores de combate (1.0 = balanceado). Afectan daño, movimiento y stamina. */
@@ -51,6 +52,7 @@ export const CHARACTER_STATS: CharacterCombatStats[] = [
   { attack: 0.92, agility: 1.0,  stamina: 1.15  },  // Jostin: menos ataque, más stamina
   { attack: 0.92, agility: 1.12, stamina: 1.0   },  // Manu: menos ataque, más agilidad
   { attack: 1.58, agility: 0.68, stamina: 0.82  },  // Diego Plaza: mucho más daño, más lento, menos stamina
+  { attack: 1.0,  agility: 1.0,  stamina: 1.0   },  // Bruno: balanceado
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
