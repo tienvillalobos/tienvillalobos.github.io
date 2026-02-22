@@ -23,6 +23,24 @@ export class SoundManager {
     }
   }
 
+  /** Sonido por letra para transiciones (OSC + gain). */
+  playLetterSound() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(480, t + 0.06);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.08, t + 0.02);
+    gain.gain.linearRampToValueAtTime(0, t + 0.06);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.06);
+  }
+
   playSFX(type: 'select' | 'hit' | 'start' | 'ko' | 'jump' | 'attack') {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -77,7 +95,7 @@ export class SoundManager {
     src.start();
   }
 
-  playMusic(mode: 'menu' | 'fight' | 'stop') {
+  playMusic(mode: 'menu' | 'fight' | 'tower' | 'stop') {
     if (this.currentMusicMode === mode) return;
     this.currentMusicMode = mode;
 
@@ -90,7 +108,7 @@ export class SoundManager {
 
     if (mode === 'stop') return;
 
-    const buffer = this.buffers[mode];
+    const buffer = mode === 'tower' ? this.buffers['enemy_tower'] : this.buffers[mode];
     if (!buffer) {
       console.warn(`Buffer de música no encontrado para: ${mode}`);
       return;
@@ -101,7 +119,7 @@ export class SoundManager {
     this.musicSource.loop = true;
 
     this.musicGain = this.ctx!.createGain();
-    this.musicGain.gain.value = mode === 'fight' ? 0.25 : 0.4;
+    this.musicGain.gain.value = mode === 'fight' ? 0.25 : mode === 'tower' ? 1 : 0.1;
     this.musicGain.connect(this.ctx!.destination);
 
     this.musicSource.connect(this.musicGain);

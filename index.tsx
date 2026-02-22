@@ -15,6 +15,8 @@ import {
   STAMINA_REGEN,
   CHARACTERS,
   CHARACTER_STATS,
+  STORY_TOWER_ORDER,
+  getStoryDifficultyMultiplier,
 } from './src/game/constants';
 import type { GameState } from './src/game/types';
 import type { Fighter } from './src/game/types';
@@ -69,6 +71,12 @@ const FighterApp = () => {
   const roundLoserRef = useRef<Fighter | null>(null);
   const playerRef = useRef<Fighter | null>(null);
   const cpuRef = useRef<Fighter | null>(null);
+  const storyPlayerCharRef = useRef<number>(0);
+  const storyTowerIndexRef = useRef<number>(-1);
+  const isStoryModeRef = useRef<boolean>(false);
+  const isStoryCharSelectRef = useRef<boolean>(false);
+  const storyTransitionLetterCountRef = useRef<number>(0);
+  const storyTowerAnimOffsetYRef = useRef<number>(999);
   const keys = useRef<{ [key: string]: boolean }>({});
   const gameLoopId = useRef<number>(0);
   const timer = useRef<number>(99);
@@ -82,6 +90,7 @@ const FighterApp = () => {
   const homeBackground = useRef<HTMLImageElement | null>(null);
   const fightBackground = useRef<HTMLImageElement | null>(null);
   const menuBackground = useRef<HTMLImageElement | null>(null);
+  const towerBackground = useRef<HTMLImageElement | null>(null);
   const stageBackgrounds = useRef<(HTMLImageElement | null)[]>([]);
   const anims = useRef<Record<string, {
     idle: HTMLImageElement[];
@@ -94,10 +103,18 @@ const FighterApp = () => {
     gameStateRef.current = gameState;
     inputCooldownRef.current = 20;
     if (gameState !== 'FIGHT') setFightPaused(false);
+    if (gameState === 'STORY_TRANSITION') {
+      frameCounter.current = 0;
+      storyTransitionLetterCountRef.current = 0;
+    }
 
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
       sounds.playMusic('fight');
-    } else if (gameState === 'MAIN_MENU' || gameState === 'ONLINE_LINK' || gameState === 'CHARACTER_SELECT' || gameState === 'ONLINE_CHARS_READY' || gameState === 'STAGE_SELECT') {
+    } else if (gameState === 'STORY_TOWER') {
+      sounds.playMusic('tower');
+    } else if (gameState === 'STORY_TRANSITION') {
+      sounds.playMusic('stop');
+    } else if (gameState === 'MAIN_MENU' || gameState === 'ONLINE_LINK' || gameState === 'CHARACTER_SELECT' || gameState === 'ONLINE_CHARS_READY' || gameState === 'STAGE_SELECT' || gameState === 'STORY_VICTORY' || gameState === 'STORY_GAME_OVER') {
       sounds.playMusic('menu');
       if (gameState === 'CHARACTER_SELECT' && prevState !== 'CHARACTER_SELECT') {
         sounds.playBuffer('menu_voice');
@@ -164,6 +181,7 @@ const FighterApp = () => {
         homeBackground,
         menuBackground,
         fightBackground,
+        towerBackground,
         stageBackgrounds,
         mugshots,
         anims,
@@ -381,13 +399,16 @@ const FighterApp = () => {
   };
 
   const initFighters = (pIdx: number, cIdx: number) => {
+    const opts = isStoryModeRef.current
+      ? { cpuStatMultiplier: getStoryDifficultyMultiplier(storyTowerIndexRef.current) }
+      : undefined;
     initFightersCombat(pIdx, cIdx, {
       playerRef,
       cpuRef,
       timer,
       frameCounter,
       screenShakeRef,
-    });
+    }, opts);
   };
 
   const loop = () => {
@@ -430,6 +451,12 @@ const FighterApp = () => {
       roundLoserRef,
       playerRef,
       cpuRef,
+      storyPlayerCharRef,
+      storyTowerIndexRef,
+      isStoryModeRef,
+      isStoryCharSelectRef,
+      storyTransitionLetterCountRef,
+      storyTowerAnimOffsetYRef,
       keys,
       timer,
       frameCounter,
@@ -441,6 +468,7 @@ const FighterApp = () => {
       homeBackground,
       fightBackground,
       menuBackground,
+      towerBackground,
       stageBackgrounds,
       anims,
       setGameState,

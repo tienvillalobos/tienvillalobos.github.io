@@ -49,10 +49,23 @@ export interface GameLoopContextRefs {
   screenShakeRef: RefObject<number>;
   fightPausedRef: RefObject<boolean>;
   matchRegisteredRef: RefObject<boolean>;
+  /** Modo Historia: personaje elegido por el jugador (índice). */
+  storyPlayerCharRef: RefObject<number>;
+  /** Modo Historia: nivel actual en la torre (0 = Eric, 5 = Diego Plaza). */
+  storyTowerIndexRef: RefObject<number>;
+  /** Modo Historia: true mientras el flujo es Historia (FIGHT puede ser story). */
+  isStoryModeRef: RefObject<boolean>;
+  /** En CHARACTER_SELECT: true si la confirmación lleva a STORY_TOWER. */
+  isStoryCharSelectRef: RefObject<boolean>;
+  /** STORY_TRANSITION: última cantidad de letras mostradas (para sonido por letra). */
+  storyTransitionLetterCountRef: RefObject<number>;
+  /** STORY_TOWER: offset Y de la animación de columna de oponentes (0 = inicio, >0 = avanzando). */
+  storyTowerAnimOffsetYRef: RefObject<number>;
   mugshots: RefObject<Record<string, HTMLImageElement>>;
   homeBackground: RefObject<HTMLImageElement | null>;
   fightBackground: RefObject<HTMLImageElement | null>;
   menuBackground: RefObject<HTMLImageElement | null>;
+  towerBackground: RefObject<HTMLImageElement | null>;
   stageBackgrounds: RefObject<(HTMLImageElement | null)[]>;
   anims: RefObject<Record<string, { idle: HTMLImageElement[]; walk: HTMLImageElement[]; attack: HTMLImageElement[] }>>;
 }

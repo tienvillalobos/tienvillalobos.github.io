@@ -19,7 +19,11 @@ export type GameState =
   | 'ROUND_RESULT'
   | 'GAME_OVER'
   | 'ERROR'
-  | 'STOP';
+  | 'STOP'
+  | 'STORY_TRANSITION'
+  | 'STORY_TOWER'
+  | 'STORY_VICTORY'
+  | 'STORY_GAME_OVER';
 
 export interface Fighter {
   x: number;
@@ -40,4 +44,6 @@ export interface Fighter {
   color: string;
   name: string;
   charId: number;
+  /** Modo Historia: multiplicador de stats del CPU (solo para el oponente). */
+  statMultiplier?: number;
 }

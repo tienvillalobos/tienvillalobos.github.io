@@ -20,6 +20,10 @@ import {
   drawRoundResult,
   drawGameOver,
   drawStop,
+  drawStoryTransition,
+  drawStoryTower,
+  drawStoryGameOver,
+  drawStoryVictory,
 } from './allScreens';
 
 export type ScreenDrawer = (ctx: CanvasRenderingContext2D, context: GameLoopContext, state?: GameState) => void;
@@ -41,6 +45,10 @@ const screenMap: Record<GameState, ScreenDrawer> = {
   ROUND_RESULT: drawRoundResult,
   GAME_OVER: drawGameOver,
   STOP: drawStop,
+  STORY_TRANSITION: drawStoryTransition,
+  STORY_TOWER: drawStoryTower,
+  STORY_VICTORY: drawStoryVictory,
+  STORY_GAME_OVER: drawStoryGameOver,
 };
 
 export function drawScreen(state: GameState, ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
@@ -54,4 +62,4 @@ export function drawScreen(state: GameState, ctx: CanvasRenderingContext2D, cont
   }
 }
 
-export { drawBoot, drawError, drawLoading, drawIntro, drawTitle, drawMainMenu, drawOnlineNameOrLink, drawCharacterSelect, drawOnlineCharsReady, drawStageSelect, drawFight, drawRoundKo, drawRoundResult, drawGameOver, drawStop } from './allScreens';
+export { drawBoot, drawError, drawLoading, drawIntro, drawTitle, drawMainMenu, drawOnlineNameOrLink, drawCharacterSelect, drawOnlineCharsReady, drawStageSelect, drawFight, drawRoundKo, drawRoundResult, drawGameOver, drawStop, drawStoryTransition, drawStoryTower, drawStoryGameOver, drawStoryVictory } from './allScreens';

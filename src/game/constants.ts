@@ -37,6 +37,7 @@ export const CHARACTERS: { id: number; name: string; color: string; locked: bool
   { id: 9, name: 'MISTRAL', color: '#FCD34D', locked: true },
   { id: 10, name: 'GROK', color: '#FFFFFF', locked: true },
   { id: 11, name: 'DEEPSEEK', color: '#6366F1', locked: true },
+  { id: 12, name: 'CRISTIAN SAUTEREL', color: '#8B5CF6', locked: true, assetKey: 'cristian sauterel' },
 ];
 
 /** Multiplicadores de combate (1.0 = balanceado). Afectan daño, movimiento y stamina. */
@@ -59,6 +60,19 @@ export const CHARACTER_STATS: CharacterCombatStats[] = [
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
   { attack: 1.0,  agility: 1.0,  stamina: 1.0   },
+  { attack: 1.45, agility: 0.85, stamina: 1.25 },  // Cristian Sauterel: alto ataque, alta stamina (solo jefe final Historia)
 ];
 
 export const ASSETS_BASE = '/assets';
+
+/** Orden de oponentes en la torre de Historia: de más débil (índice 0) a más fuerte (final).
+ * Eric → Jostin → David → Bruno → Manu → Diego Plaza → Cristian Sauterel (jefe final). */
+export const STORY_TOWER_ORDER: number[] = [0, 2, 1, 5, 3, 4, 12];
+
+/** Multiplicador de dificultad por nivel de la torre (0 = Eric 1.0, 6 = Cristian Sauterel jefe final). */
+export function getStoryDifficultyMultiplier(towerIndex: number): number {
+  const t = Math.max(0, Math.min(6, towerIndex));
+  if (t === 6) return 2.45;
+  if (t === 5) return 2.2;
+  return 1.0 + t * 0.22;
+}

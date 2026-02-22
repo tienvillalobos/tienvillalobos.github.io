@@ -4,12 +4,13 @@
  */
 
 import { sounds } from '../audio/SoundManager';
-import { ASSETS_BASE, CHARACTERS } from '../game/constants';
+import { ASSETS_BASE, CHARACTERS, STORY_TOWER_ORDER } from '../game/constants';
 
 export interface AssetRefs {
   homeBackground: { current: HTMLImageElement | null };
   menuBackground: { current: HTMLImageElement | null };
   fightBackground: { current: HTMLImageElement | null };
+  towerBackground: { current: HTMLImageElement | null };
   stageBackgrounds: { current: (HTMLImageElement | null)[] };
   mugshots: { current: Record<string, HTMLImageElement> };
   anims: { current: Record<string, { idle: HTMLImageElement[]; walk: HTMLImageElement[]; attack: HTMLImageElement[] }> };
@@ -39,7 +40,7 @@ export async function loadAllAssets(options: LoadAllAssetsOptions): Promise<void
   try {
     sounds.init();
 
-    const soundNames = ['menu', 'fight', 'ko', 'menu_voice'];
+    const soundNames = ['menu', 'fight', 'ko', 'menu_voice', 'enemy_tower'];
     for (const name of soundNames) {
       const res = await fetch(`${ASSETS_BASE}/sounds/${name}.ogg`);
       if (res.ok) {
@@ -53,7 +54,11 @@ export async function loadAllAssets(options: LoadAllAssetsOptions): Promise<void
     const playableChars = CHARACTERS.filter((c) => !c.locked).map(
       (c) => c.assetKey ?? c.name.toLowerCase().replace(/\s+/g, '_'),
     );
-    const totalToLoad = playableChars.length * 3 * 36 + playableChars.length + 5;
+    const storyOnlyKeys = STORY_TOWER_ORDER.filter((idx) => CHARACTERS[idx]?.locked).map(
+      (idx) => CHARACTERS[idx].assetKey ?? CHARACTERS[idx].name.toLowerCase().replace(/\s+/g, '_'),
+    );
+    const charKeysToLoad = [...new Set([...playableChars, ...storyOnlyKeys])];
+    const totalToLoad = charKeysToLoad.length * 3 * 36 + charKeysToLoad.length + 6;
     let loadedCount = 0;
 
     const getImg = (url: string): Promise<HTMLImageElement> => {
@@ -79,6 +84,7 @@ export async function loadAllAssets(options: LoadAllAssetsOptions): Promise<void
 
     assetRefs.homeBackground.current = await getImg(`${ASSETS_BASE}/backgrounds/home.png`);
     assetRefs.menuBackground.current = await getImg(`${ASSETS_BASE}/backgrounds/menu.png`);
+    assetRefs.towerBackground.current = await getImg(`${ASSETS_BASE}/backgrounds/enemy_tower.png`);
     assetRefs.stageBackgrounds.current = [
       await getImg(`${ASSETS_BASE}/backgrounds/stages/arena.png`),
       await getImg(`${ASSETS_BASE}/backgrounds/stages/coffee_room.png`),
@@ -88,7 +94,7 @@ export async function loadAllAssets(options: LoadAllAssetsOptions): Promise<void
       null,
     ];
 
-    for (const charName of playableChars) {
+    for (const charName of charKeysToLoad) {
       assetRefs.mugshots.current[charName] = await getImg(`${ASSETS_BASE}/characters/${charName}/mugshot.png`);
       assetRefs.anims.current[charName] = { idle: [], walk: [], attack: [] };
       for (const cat of categories) {

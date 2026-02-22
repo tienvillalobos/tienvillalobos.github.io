@@ -131,8 +131,8 @@ export function drawMainMenu(ctx: CanvasRenderingContext2D, context: GameLoopCon
   const gap = 20;
   const totalH = 4 * boxH + 3 * gap;
   const startY = (context.CANVAS_HEIGHT - totalH) / 2 + 45;
-  const labels = ['Jugador', 'Multijugador', 'HISTORIA', 'Leaderboard'];
-  const faIcons = ['\uF007', '\uF0C0', null, '\uF091'];
+  const labels = ['Jugador', 'Multijugador', 'Modo Historia', 'Leaderboard'];
+  const faIcons = ['\uF007', '\uF0C0', '\uF02d', '\uF091'];
   const idx = context.modeSelectIndexRef.current;
   const iconSize = 20;
   const iconGap = 10;
@@ -141,13 +141,12 @@ export function drawMainMenu(ctx: CanvasRenderingContext2D, context: GameLoopCon
     const x = (context.CANVAS_WIDTH - boxW) / 2;
     const y = startY + i * (boxH + gap);
     const isSelected = idx === i;
-    const isLocked = i === 2;
-    ctx.fillStyle = isLocked ? 'rgba(30, 30, 40, 0.95)' : (isSelected ? 'rgba(23, 42, 69, 0.95)' : 'rgba(15, 30, 50, 0.9)');
+    ctx.fillStyle = isSelected ? 'rgba(23, 42, 69, 0.95)' : 'rgba(15, 30, 50, 0.9)';
     ctx.fillRect(x, y, boxW, boxH);
-    ctx.strokeStyle = isLocked ? '#444' : (isSelected ? '#ffd700' : '#4a6fa5');
+    ctx.strokeStyle = isSelected ? '#ffd700' : '#4a6fa5';
     ctx.lineWidth = isSelected ? 4 : 2;
     ctx.strokeRect(x, y, boxW, boxH);
-    ctx.fillStyle = isLocked ? '#555' : (isSelected ? '#ffd700' : '#e0e0e0');
+    ctx.fillStyle = isSelected ? '#ffd700' : '#e0e0e0';
     ctx.font = '14px "Press Start 2P"';
     const textW = ctx.measureText(labels[i]).width;
     const iconW = faIcons[i] != null ? iconSize + iconGap : 0;
@@ -188,6 +187,15 @@ export function drawMainMenu(ctx: CanvasRenderingContext2D, context: GameLoopCon
   if (context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
     if (idx === 0) {
       sounds.playSFX('select');
+      context.isStoryCharSelectRef.current = false;
+      context.setGameState('CHARACTER_SELECT');
+    } else if (idx === 2) {
+      sounds.playSFX('select');
+      context.storyPlayerCharRef.current = 0;
+      context.storyTowerIndexRef.current = -1;
+      context.isStoryModeRef.current = true;
+      context.isStoryCharSelectRef.current = true;
+      context.setSelectedChar(0);
       context.setGameState('CHARACTER_SELECT');
     } else if (idx === 1) {
       sounds.playSFX('select');
@@ -207,6 +215,136 @@ export function drawMainMenu(ctx: CanvasRenderingContext2D, context: GameLoopCon
       sounds.playSFX('select');
       if (typeof window !== 'undefined') window.open(LEADERBOARD_URL, '_blank', 'noopener,noreferrer');
     }
+  }
+}
+
+import { STORY_TOWER_ORDER } from '../constants';
+
+const STORY_TRANSITION_TEXT = 'Preparate para la pelea';
+
+export function drawStoryTransition(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  const frame = context.frameCounter.current;
+  const delayFrames = 18;
+  const lettersShown = Math.min(STORY_TRANSITION_TEXT.length, Math.max(0, Math.floor((frame - delayFrames) / 3)));
+  const prevCount = context.storyTransitionLetterCountRef.current;
+  if (lettersShown > prevCount) {
+    for (let i = prevCount; i < lettersShown; i++) {
+      sounds.playLetterSound();
+    }
+    context.storyTransitionLetterCountRef.current = lettersShown;
+  }
+  ctx.fillStyle = '#fff';
+  ctx.font = '14px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText(STORY_TRANSITION_TEXT.slice(0, lettersShown), context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2);
+  context.frameCounter.current++;
+  const holdFrames = 70;
+  if (lettersShown >= STORY_TRANSITION_TEXT.length && frame > delayFrames + STORY_TRANSITION_TEXT.length * 3 + holdFrames) {
+    context.storyTowerAnimOffsetYRef.current = 999;
+    context.setGameState('STORY_TOWER');
+  }
+}
+
+const TOWER_SLOT_HEIGHT = 170;
+const TOWER_ANIM_END = 180;
+const TOWER_ANIM_SPEED = 3;
+
+export function drawStoryTower(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
+  if (context.isValid(context.towerBackground.current)) {
+    ctx.drawImage(context.towerBackground.current, 0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  } else {
+    ctx.fillStyle = '#0a192f';
+    ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  }
+  const currentLevel = context.storyTowerIndexRef.current;
+  const playerCharIdx = context.storyPlayerCharRef.current;
+  const opponentIdx = STORY_TOWER_ORDER[currentLevel];
+  const nextOpponentIdx = currentLevel + 1 < STORY_TOWER_ORDER.length ? STORY_TOWER_ORDER[currentLevel + 1] : null;
+  const defeatedOpponentIdx = currentLevel > 0 ? STORY_TOWER_ORDER[currentLevel - 1] : null;
+  let animOffsetY = context.storyTowerAnimOffsetYRef.current;
+  const isAnimating = currentLevel > 0 && animOffsetY < TOWER_ANIM_END;
+
+  const cx = context.CANVAS_WIDTH / 2;
+  const mugSize = 100;
+  const nextSlotY = 24;
+  const mugY = 200;
+  const playerMugX = cx - mugSize - 60;
+  const oppMugX = cx + 60;
+
+  function drawOpponentSlot(charIdx: number, x: number, y: number, highlighted: boolean) {
+    const key = context.getCharKey(charIdx);
+    const mug = context.mugshots.current[key];
+    ctx.fillStyle = 'rgba(20,20,35,0.9)';
+    ctx.fillRect(x - 4, y - 4, mugSize + 8, mugSize + 8);
+    ctx.strokeStyle = highlighted ? '#f44' : '#666';
+    ctx.lineWidth = highlighted ? 4 : 2;
+    ctx.strokeRect(x - 4, y - 4, mugSize + 8, mugSize + 8);
+    if (mug && context.isValid(mug)) {
+      ctx.drawImage(mug, x, y, mugSize, mugSize);
+    }
+    ctx.fillStyle = highlighted ? '#ffd700' : '#aaa';
+    ctx.font = '8px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText(context.CHARACTERS[charIdx]?.name ?? '', x + mugSize / 2, y + mugSize + 14);
+  }
+
+  if (isAnimating) {
+    animOffsetY = Math.min(TOWER_ANIM_END, animOffsetY + TOWER_ANIM_SPEED);
+    context.storyTowerAnimOffsetYRef.current = animOffsetY;
+    const defeatedY = mugY + animOffsetY;
+    const nextY = nextSlotY + animOffsetY;
+    const alphaDefeated = Math.max(0, 1 - animOffsetY / TOWER_ANIM_END);
+    ctx.globalAlpha = alphaDefeated;
+    if (defeatedOpponentIdx != null) {
+      drawOpponentSlot(defeatedOpponentIdx, oppMugX, defeatedY, false);
+    }
+    ctx.globalAlpha = 1;
+    drawOpponentSlot(opponentIdx, oppMugX, nextY, true);
+  } else {
+    if (nextOpponentIdx != null) {
+      drawOpponentSlot(nextOpponentIdx, oppMugX, nextSlotY, false);
+    }
+    drawOpponentSlot(opponentIdx, oppMugX, mugY, true);
+  }
+
+  const playerMugKey = context.getCharKey(playerCharIdx);
+  const playerMug = context.mugshots.current[playerMugKey];
+  ctx.fillStyle = 'rgba(20,20,35,0.9)';
+  ctx.fillRect(playerMugX - 4, mugY - 4, mugSize + 8, mugSize + 8);
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(playerMugX - 4, mugY - 4, mugSize + 8, mugSize + 8);
+  if (playerMug && context.isValid(playerMug)) {
+    ctx.drawImage(playerMug, playerMugX, mugY, mugSize, mugSize);
+  }
+  ctx.fillStyle = '#ffd700';
+  ctx.font = '8px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText(context.CHARACTERS[playerCharIdx]?.name ?? '', playerMugX + mugSize / 2, mugY + mugSize + 14);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '10px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Nivel ${currentLevel + 1}/${STORY_TOWER_ORDER.length}`, cx, 328);
+  if (!isAnimating) {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('SPACE/ENTER - Pelear', cx, 358);
+  }
+  context.frameCounter.current++;
+  if (!isAnimating && context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
+    sounds.playSFX('select');
+    context.setCpuChar(opponentIdx);
+    context.cpuCharRef.current = opponentIdx;
+    context.selectedCharRef.current = playerCharIdx;
+    context.resetMatchState();
+    const unlockedStages = context.STAGES.map((_, i) => i).filter((i) => !context.STAGES[i].locked);
+    const stageIdx = unlockedStages.length > 0 ? unlockedStages[Math.floor(Math.random() * unlockedStages.length)] : 0;
+    const bg = context.stageBackgrounds.current[stageIdx];
+    context.fightBackground.current = bg && context.isValid(bg) ? bg : null;
+    context.initFighters(playerCharIdx, opponentIdx);
+    context.setGameState('FIGHT');
   }
 }
 
@@ -455,14 +593,23 @@ export function drawCharacterSelect(ctx: CanvasRenderingContext2D, context: Game
           context.inputCooldownRef.current = 45;
           sounds.playSFX('select');
         } else {
-          const candidates = charsInSelect
-            .map((_, i) => i)
-            .filter((i) => i !== selectedIdx && !context.CHARACTERS[i].locked);
-          const cpu = candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
-          context.setCpuChar(cpu);
-          context.cpuCharRef.current = cpu;
-          context.resetMatchState();
-          context.setGameState('STAGE_SELECT');
+          if (context.isStoryCharSelectRef.current) {
+            sounds.playSFX('select');
+            context.storyPlayerCharRef.current = selectedIdx;
+            context.storyTowerIndexRef.current = 0;
+            context.isStoryModeRef.current = true;
+            context.storyTowerAnimOffsetYRef.current = 999;
+            context.setGameState('STORY_TRANSITION');
+          } else {
+            const candidates = charsInSelect
+              .map((_, i) => i)
+              .filter((i) => i !== selectedIdx && !context.CHARACTERS[i].locked);
+            const cpu = candidates[Math.floor(Math.random() * candidates.length)] ?? 0;
+            context.setCpuChar(cpu);
+            context.cpuCharRef.current = cpu;
+            context.resetMatchState();
+            context.setGameState('STAGE_SELECT');
+          }
         }
       }
     }
@@ -879,7 +1026,20 @@ export function drawRoundResult(ctx: CanvasRenderingContext2D, context: GameLoop
     });
   }
   if (context.frameCounter.current > 120) {
-    if (context.scoreRef.current.p1 >= 2 || context.scoreRef.current.p2 >= 2) {
+    if (context.isStoryModeRef.current) {
+      const playerWon = context.winnerNameRef.current === context.playerRef.current?.name;
+      if (!playerWon) {
+        context.isStoryModeRef.current = false;
+        context.setGameState('STORY_GAME_OVER');
+      } else if (context.storyTowerIndexRef.current >= STORY_TOWER_ORDER.length - 1) {
+        context.isStoryModeRef.current = false;
+        context.setGameState('STORY_VICTORY');
+      } else {
+        context.storyTowerIndexRef.current++;
+        context.storyTowerAnimOffsetYRef.current = 0;
+        context.setGameState('STORY_TOWER');
+      }
+    } else if (context.scoreRef.current.p1 >= 2 || context.scoreRef.current.p2 >= 2) {
       context.setGameState('GAME_OVER');
     } else {
       context.roundRef.current++;
@@ -978,6 +1138,67 @@ export function drawGameOver(ctx: CanvasRenderingContext2D, context: GameLoopCon
       winnerName: context.winnerNameRef.current,
     });
   }
+  if (context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
+    sounds.playSFX('select');
+    context.setGameState('TITLE');
+    context.resetMatchState();
+  }
+}
+
+export function drawStoryGameOver(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
+  if (context.isValid(context.menuBackground.current)) {
+    ctx.drawImage(context.menuBackground.current, 0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  } else {
+    ctx.fillStyle = '#0a192f';
+    ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  ctx.fillStyle = '#f44';
+  ctx.font = '24px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText('GAME OVER', context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2 - 30);
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px "Press Start 2P"';
+  ctx.fillText('El modo Historia ha terminado.', context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2 + 10);
+  ctx.fillStyle = '#ffd700';
+  ctx.font = '14px "Press Start 2P"';
+  ctx.fillText('SPACE/ENTER - Volver a intentar', context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2 + 55);
+  if (context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
+    sounds.playSFX('select');
+    context.storyTowerIndexRef.current = -1;
+    context.isStoryCharSelectRef.current = true;
+    context.setGameState('CHARACTER_SELECT');
+  }
+}
+
+export function drawStoryVictory(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
+  if (context.isValid(context.menuBackground.current)) {
+    ctx.drawImage(context.menuBackground.current, 0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  } else {
+    ctx.fillStyle = '#0a192f';
+    ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+  const cx = context.CANVAS_WIDTH / 2;
+  const cy = context.CANVAS_HEIGHT / 2;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.save();
+  ctx.shadowColor = '#ffd700';
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = '#ffd700';
+  ctx.font = '28px "Press Start 2P"';
+  ctx.fillText('VICTORIA', cx, cy - 45);
+  ctx.restore();
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px "Press Start 2P"';
+  ctx.fillText('Has completado el modo Historia.', cx, cy + 5);
+  ctx.fillStyle = '#aaa';
+  ctx.font = '10px "Press Start 2P"';
+  ctx.fillText('SPACE/ENTER - Volver al menu', cx, cy + 50);
+  ctx.textBaseline = 'alphabetic';
   if (context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
     sounds.playSFX('select');
     context.setGameState('TITLE');

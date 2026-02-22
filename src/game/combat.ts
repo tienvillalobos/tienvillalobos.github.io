@@ -25,14 +25,26 @@ export interface InitFightersRefs {
   screenShakeRef: { current: number };
 }
 
+export interface InitFightersOptions {
+  /** Modo Historia: multiplicador de stats del CPU. */
+  cpuStatMultiplier?: number;
+}
+
 export function initFighters(
   pIdx: number,
   cIdx: number,
   refs: InitFightersRefs,
+  options?: InitFightersOptions,
 ): void {
   const { playerRef, cpuRef, timer, frameCounter, screenShakeRef } = refs;
+  const cpuMult = options?.cpuStatMultiplier ?? 1;
   const pStats = CHARACTER_STATS[pIdx] ?? { attack: 1, agility: 1, stamina: 1 };
-  const cStats = CHARACTER_STATS[cIdx] ?? { attack: 1, agility: 1, stamina: 1 };
+  const cBase = CHARACTER_STATS[cIdx] ?? { attack: 1, agility: 1, stamina: 1 };
+  const cStats = {
+    attack: cBase.attack * cpuMult,
+    agility: cBase.agility * cpuMult,
+    stamina: cBase.stamina * cpuMult,
+  };
   const pMaxStamina = Math.round(STAMINA_MAX * pStats.stamina);
   const cMaxStamina = Math.round(STAMINA_MAX * cStats.stamina);
   playerRef.current = {
@@ -41,12 +53,14 @@ export function initFighters(
     velocityX: 0, velocityY: 0, isAttacking: false, stamina: pMaxStamina, maxStamina: pMaxStamina,
     color: CHARACTERS[pIdx].color, name: CHARACTERS[pIdx].name, charId: pIdx,
   };
-  cpuRef.current = {
+  const cpu: Fighter = {
     x: 480, y: GROUND_Y, width: 220, height: 220, hp: 100, maxHp: 100,
     direction: -1, state: 'IDLE', animFrame: 0, animTimer: 0,
     velocityX: 0, velocityY: 0, isAttacking: false, stamina: cMaxStamina, maxStamina: cMaxStamina,
     color: CHARACTERS[cIdx].color, name: CHARACTERS[cIdx].name, charId: cIdx,
   };
+  if (cpuMult !== 1) cpu.statMultiplier = cpuMult;
+  cpuRef.current = cpu;
   timer.current = 99;
   frameCounter.current = 0;
   screenShakeRef.current = 0;
@@ -82,7 +96,14 @@ export function updateCombat(
     if (f.state === 'JUMP') f.state = 'IDLE';
   }
 
-  const fStats = CHARACTER_STATS[f.charId] ?? { attack: 1, agility: 1, stamina: 1 };
+  const baseStats = CHARACTER_STATS[f.charId] ?? { attack: 1, agility: 1, stamina: 1 };
+  const fStats = f.statMultiplier != null && f.statMultiplier !== 1
+    ? {
+        attack: baseStats.attack * f.statMultiplier,
+        agility: baseStats.agility * f.statMultiplier,
+        stamina: baseStats.stamina * f.statMultiplier,
+      }
+    : baseStats;
   const walkSpeed = 4 * fStats.agility;
   const cpuWalkSpeed = 2.5 * fStats.agility;
   const jumpPower = 15 * fStats.agility;
