@@ -46,4 +46,6 @@ export interface Fighter {
   charId: number;
   /** Modo Historia: multiplicador de stats del CPU (solo para el oponente). */
   statMultiplier?: number;
+  /** Golpe especial (tecla J): aplica daño x10. */
+  powerPunch?: boolean;
 }

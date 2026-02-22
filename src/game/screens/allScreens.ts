@@ -6,6 +6,7 @@
 import { sounds } from '../../audio/SoundManager';
 import { updateCombat, type CombatControl } from '../combat';
 import { drawFighter, drawFighterFallen, drawHpBar } from '../drawing';
+import { drawExtraAnimFrame } from '../drawing/extraAnims';
 import type { GameLoopContext } from '../loopContext';
 import type { GameState } from '../types';
 
@@ -220,7 +221,7 @@ export function drawMainMenu(ctx: CanvasRenderingContext2D, context: GameLoopCon
 
 import { STORY_TOWER_ORDER } from '../constants';
 
-const STORY_TRANSITION_TEXT = 'Preparate para la pelea';
+const STORY_TRANSITION_TEXT = 'Defontana ha clonado a los Maxxitos\nVence a los clones para salvar a Maxxa';
 
 export function drawStoryTransition(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
   ctx.fillStyle = '#000';
@@ -231,14 +232,21 @@ export function drawStoryTransition(ctx: CanvasRenderingContext2D, context: Game
   const prevCount = context.storyTransitionLetterCountRef.current;
   if (lettersShown > prevCount) {
     for (let i = prevCount; i < lettersShown; i++) {
-      sounds.playLetterSound();
+      if (STORY_TRANSITION_TEXT[i] !== '\n') sounds.playLetterSound();
     }
     context.storyTransitionLetterCountRef.current = lettersShown;
   }
   ctx.fillStyle = '#fff';
   ctx.font = '14px "Press Start 2P"';
   ctx.textAlign = 'center';
-  ctx.fillText(STORY_TRANSITION_TEXT.slice(0, lettersShown), context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2);
+  const visibleText = STORY_TRANSITION_TEXT.slice(0, lettersShown);
+  const lines = visibleText.split('\n');
+  const lineHeight = 22;
+  const cy = context.CANVAS_HEIGHT / 2;
+  const startY = cy - (lines.length - 1) * (lineHeight / 2);
+  lines.forEach((line, i) => {
+    ctx.fillText(line, context.CANVAS_WIDTH / 2, startY + i * lineHeight);
+  });
   context.frameCounter.current++;
   const holdFrames = 70;
   if (lettersShown >= STORY_TRANSITION_TEXT.length && frame > delayFrames + STORY_TRANSITION_TEXT.length * 3 + holdFrames) {
@@ -339,10 +347,15 @@ export function drawStoryTower(ctx: CanvasRenderingContext2D, context: GameLoopC
     context.cpuCharRef.current = opponentIdx;
     context.selectedCharRef.current = playerCharIdx;
     context.resetMatchState();
-    const unlockedStages = context.STAGES.map((_, i) => i).filter((i) => !context.STAGES[i].locked);
-    const stageIdx = unlockedStages.length > 0 ? unlockedStages[Math.floor(Math.random() * unlockedStages.length)] : 0;
-    const bg = context.stageBackgrounds.current[stageIdx];
-    context.fightBackground.current = bg && context.isValid(bg) ? bg : null;
+    const isFinalBoss = currentLevel === STORY_TOWER_ORDER.length - 1;
+    if (isFinalBoss && context.isValid(context.towerBackground.current)) {
+      context.fightBackground.current = context.towerBackground.current;
+    } else {
+      const unlockedStages = context.STAGES.map((_, i) => i).filter((i) => !context.STAGES[i].locked);
+      const stageIdx = unlockedStages.length > 0 ? unlockedStages[Math.floor(Math.random() * unlockedStages.length)] : 0;
+      const bg = context.stageBackgrounds.current[stageIdx];
+      context.fightBackground.current = bg && context.isValid(bg) ? bg : null;
+    }
     context.initFighters(playerCharIdx, opponentIdx);
     context.setGameState('FIGHT');
   }
@@ -1172,36 +1185,111 @@ export function drawStoryGameOver(ctx: CanvasRenderingContext2D, context: GameLo
   }
 }
 
+const VICTORY_CREDITS: { type: 'title' | 'subtitle' | 'line'; text: string }[] = [
+  { type: 'title', text: 'VICTORIA' },
+  { type: 'subtitle', text: 'Has salvado a Maxxa' },
+  { type: 'line', text: '' },
+  { type: 'subtitle', text: 'LA MAXXA VELADA' },
+  { type: 'line', text: '' },
+  { type: 'line', text: 'Direccion' },
+  { type: 'line', text: 'Nombre del director' },
+  { type: 'line', text: '' },
+  { type: 'line', text: 'Arte y diseno' },
+  { type: 'line', text: 'Nombre artista' },
+  { type: 'line', text: '' },
+  { type: 'line', text: 'Programacion' },
+  { type: 'line', text: 'Nombre programador' },
+  { type: 'line', text: '' },
+  { type: 'line', text: 'Musica y sonido' },
+  { type: 'line', text: 'Nombre musico' },
+  { type: 'line', text: '' },
+  { type: 'line', text: 'Gracias por jugar' },
+  { type: 'line', text: '' },
+  { type: 'line', text: 'SPACE/ENTER - Volver al menu' },
+];
+
+const VICTORY_LINE_HEIGHT = 28;
+const VICTORY_SCROLL_SPEED = 0.65;
+const VICTORY_TRANSFORMATION_KEY = 'bruno_bachatin/transformation';
+const VICTORY_DANCE_KEY = 'bruno_bachatin/dance';
+const VICTORY_DELAY_FRAMES = 60; // 1 segundo antes de mostrar animaciones
+const VICTORY_SPRITE_W = 200;
+const VICTORY_SPRITE_H = 200;
+const VICTORY_SPRITE_X = 24;
+const VICTORY_SPRITE_Y_OFFSET = 18; // ajuste vertical de la animación
+const VICTORY_SPRITE_FRAME_STEP = 2;
+const VICTORY_TRANSFORMATION_ANIM_FRAMES = 36; // transformation se ejecuta 1 vez (36 frames)
+
 export function drawStoryVictory(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
-  if (context.isValid(context.menuBackground.current)) {
-    ctx.drawImage(context.menuBackground.current, 0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
-  } else {
-    ctx.fillStyle = '#0a192f';
-    ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
-  }
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+
+  const frame = context.frameCounter.current;
+  const transformationFrames = context.extraAnims.current[VICTORY_TRANSFORMATION_KEY];
+  const danceFrames = context.extraAnims.current[VICTORY_DANCE_KEY];
+  const spriteY = (context.CANVAS_HEIGHT - VICTORY_SPRITE_H) / 2 + VICTORY_SPRITE_Y_OFFSET;
+
+  if (frame >= VICTORY_DELAY_FRAMES) {
+    const t = frame - VICTORY_DELAY_FRAMES;
+    const transformationGameFrames = VICTORY_TRANSFORMATION_ANIM_FRAMES * VICTORY_SPRITE_FRAME_STEP;
+
+    if (t < transformationGameFrames && transformationFrames?.length) {
+      const animFrameIndex = Math.min(Math.floor(t / VICTORY_SPRITE_FRAME_STEP), transformationFrames.length - 1);
+      const fadeAlpha = Math.min(1, t / 20);
+      drawExtraAnimFrame(ctx, transformationFrames, animFrameIndex, VICTORY_SPRITE_X, spriteY, VICTORY_SPRITE_W, VICTORY_SPRITE_H, fadeAlpha);
+    } else if (danceFrames?.length) {
+      const danceT = t - transformationGameFrames;
+      const animFrameIndex = Math.floor(danceT / VICTORY_SPRITE_FRAME_STEP) % danceFrames.length;
+      drawExtraAnimFrame(ctx, danceFrames, animFrameIndex, VICTORY_SPRITE_X, spriteY, VICTORY_SPRITE_W, VICTORY_SPRITE_H, 1);
+    }
+  }
+
   const cx = context.CANVAS_WIDTH / 2;
-  const cy = context.CANVAS_HEIGHT / 2;
+  const scrollY = frame * VICTORY_SCROLL_SPEED;
+  const startY = context.CANVAS_HEIGHT + 60;
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.save();
-  ctx.shadowColor = '#ffd700';
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = '#ffd700';
-  ctx.font = '28px "Press Start 2P"';
-  ctx.fillText('VICTORIA', cx, cy - 45);
-  ctx.restore();
-  ctx.fillStyle = '#fff';
-  ctx.font = '12px "Press Start 2P"';
-  ctx.fillText('Has completado el modo Historia.', cx, cy + 5);
-  ctx.fillStyle = '#aaa';
-  ctx.font = '10px "Press Start 2P"';
-  ctx.fillText('SPACE/ENTER - Volver al menu', cx, cy + 50);
-  ctx.textBaseline = 'alphabetic';
-  if (context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
-    sounds.playSFX('select');
-    context.setGameState('TITLE');
-    context.resetMatchState();
+
+  VICTORY_CREDITS.forEach((item, i) => {
+    const y = startY + i * VICTORY_LINE_HEIGHT - scrollY;
+    if (y < -20 || y > context.CANVAS_HEIGHT + 20) return;
+
+    if (item.type === 'title') {
+      ctx.save();
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = '#ffd700';
+      ctx.font = '24px "Press Start 2P"';
+      ctx.fillText(item.text, cx, y);
+      ctx.restore();
+    } else if (item.type === 'subtitle') {
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px "Press Start 2P"';
+      ctx.fillText(item.text, cx, y);
+    } else {
+      ctx.fillStyle = '#888';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText(item.text || ' ', cx, y);
+    }
+  });
+
+  context.frameCounter.current++;
+
+  const totalContentH = VICTORY_CREDITS.length * VICTORY_LINE_HEIGHT;
+  const creditsFinished = scrollY > totalContentH + context.CANVAS_HEIGHT;
+
+  if (creditsFinished || context.inputCooldownRef.current === 0) {
+    if (creditsFinished) {
+      ctx.fillStyle = '#666';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      ctx.fillText('SPACE/ENTER - Volver al menu', cx, context.CANVAS_HEIGHT - 24);
+    }
+    if (context.inputCooldownRef.current === 0 && (context.keys.current['Space'] || context.keys.current['Enter'])) {
+      sounds.playSFX('select');
+      context.setGameState('TITLE');
+      context.resetMatchState();
+    }
   }
 }

@@ -133,11 +133,19 @@ export function updateCombat(
       if ((refs.keys.current['KeyW'] || refs.keys.current['ArrowUp']) && f.y === GROUND_Y) {
         f.velocityY = -jumpPower;
       }
-      if ((refs.keys.current['Space'] || refs.keys.current['KeyK']) && f.stamina >= staminaCost) {
+      if (refs.keys.current['KeyJ'] && f.stamina >= staminaCost) {
         f.stamina -= staminaCost;
         f.isAttacking = true;
         f.state = 'ATTACK';
         f.animFrame = 0;
+        f.powerPunch = true;
+        sounds.playSFX('attack');
+      } else if ((refs.keys.current['Space'] || refs.keys.current['KeyK']) && f.stamina >= staminaCost) {
+        f.stamina -= staminaCost;
+        f.isAttacking = true;
+        f.state = 'ATTACK';
+        f.animFrame = 0;
+        f.powerPunch = false;
         sounds.playSFX('attack');
       }
     }
@@ -199,12 +207,14 @@ export function updateCombat(
 
   const baseDamage = 10;
   const hitDamage = Math.max(1, Math.round(baseDamage * fStats.attack));
+  const finalDamage = isPlayer && f.powerPunch ? hitDamage * 10 : hitDamage;
 
   if (f.isAttacking) {
     if (f.animFrame >= 36) {
       f.isAttacking = false;
       f.state = 'IDLE';
       f.animFrame = 0;
+      f.powerPunch = false;
     }
     if (applyHitDetection && f.animFrame >= 15 && f.animFrame <= 25 && f.animTimer === 0) {
       const hitX = f.direction === 1 ? f.x + f.width - 90 : f.x + 40;
@@ -215,7 +225,7 @@ export function updateCombat(
         f.y + 120 > opp.y
       ) {
         if (opp.state !== 'HIT') {
-          opp.hp = Math.max(0, opp.hp - hitDamage);
+          opp.hp = Math.max(0, opp.hp - finalDamage);
           opp.state = 'HIT';
           opp.animFrame = 0;
           opp.velocityX = f.direction * 8;

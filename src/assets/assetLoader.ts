@@ -6,6 +6,18 @@
 import { sounds } from '../audio/SoundManager';
 import { ASSETS_BASE, CHARACTERS, STORY_TOWER_ORDER } from '../game/constants';
 
+/** Animaciones de sprites que no son personajes jugables (créditos, público, etc.). */
+export interface ExtraAnimSpec {
+  key: string;
+  path: string;
+  frameCount: number;
+}
+
+export const EXTRA_ANIM_SPECS: ExtraAnimSpec[] = [
+  { key: 'bruno_bachatin/transformation', path: 'bruno_bachatin/transformation', frameCount: 36 },
+  { key: 'bruno_bachatin/dance', path: 'bruno_bachatin/dance', frameCount: 36 },
+];
+
 export interface AssetRefs {
   homeBackground: { current: HTMLImageElement | null };
   menuBackground: { current: HTMLImageElement | null };
@@ -14,6 +26,7 @@ export interface AssetRefs {
   stageBackgrounds: { current: (HTMLImageElement | null)[] };
   mugshots: { current: Record<string, HTMLImageElement> };
   anims: { current: Record<string, { idle: HTMLImageElement[]; walk: HTMLImageElement[]; attack: HTMLImageElement[] }> };
+  extraAnims: { current: Record<string, HTMLImageElement[]> };
 }
 
 export interface LoadAllAssetsOptions {
@@ -58,7 +71,8 @@ export async function loadAllAssets(options: LoadAllAssetsOptions): Promise<void
       (idx) => CHARACTERS[idx].assetKey ?? CHARACTERS[idx].name.toLowerCase().replace(/\s+/g, '_'),
     );
     const charKeysToLoad = [...new Set([...playableChars, ...storyOnlyKeys])];
-    const totalToLoad = charKeysToLoad.length * 3 * 36 + charKeysToLoad.length + 6;
+    const extraFramesCount = EXTRA_ANIM_SPECS.reduce((acc, spec) => acc + spec.frameCount, 0);
+    const totalToLoad = charKeysToLoad.length * 3 * 36 + charKeysToLoad.length + 6 + extraFramesCount;
     let loadedCount = 0;
 
     const getImg = (url: string): Promise<HTMLImageElement> => {
@@ -106,6 +120,16 @@ export async function loadAllAssets(options: LoadAllAssetsOptions): Promise<void
         const results = await Promise.all(promises);
         assetRefs.anims.current[charName][cat as 'idle' | 'walk' | 'attack'] = results.filter(isValid);
       }
+    }
+
+    for (const spec of EXTRA_ANIM_SPECS) {
+      const promises: Promise<HTMLImageElement>[] = [];
+      for (let i = 1; i <= spec.frameCount; i++) {
+        const f = i.toString().padStart(3, '0');
+        promises.push(getImg(`${ASSETS_BASE}/characters/${spec.path}/frame_${f}.png`));
+      }
+      const results = await Promise.all(promises);
+      assetRefs.extraAnims.current[spec.key] = results.filter(isValid);
     }
 
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');

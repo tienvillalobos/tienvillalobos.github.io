@@ -68,6 +68,7 @@ export interface GameLoopContextRefs {
   towerBackground: RefObject<HTMLImageElement | null>;
   stageBackgrounds: RefObject<(HTMLImageElement | null)[]>;
   anims: RefObject<Record<string, { idle: HTMLImageElement[]; walk: HTMLImageElement[]; attack: HTMLImageElement[] }>>;
+  extraAnims: RefObject<Record<string, HTMLImageElement[]>>;
 }
 
 export interface GameLoopContextSetters {

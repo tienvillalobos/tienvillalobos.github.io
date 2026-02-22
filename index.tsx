@@ -97,6 +97,7 @@ const FighterApp = () => {
     walk: HTMLImageElement[];
     attack: HTMLImageElement[];
   }>>({});
+  const extraAnims = useRef<Record<string, HTMLImageElement[]>>({});
 
   useEffect(() => { 
     const prevState = gameStateRef.current;
@@ -106,6 +107,9 @@ const FighterApp = () => {
     if (gameState === 'STORY_TRANSITION') {
       frameCounter.current = 0;
       storyTransitionLetterCountRef.current = 0;
+    }
+    if (gameState === 'STORY_VICTORY') {
+      frameCounter.current = 0;
     }
 
     if (gameState === 'INTRO' || gameState === 'TITLE' || gameState === 'FIGHT' || gameState === 'ROUND_KO') {
@@ -185,6 +189,7 @@ const FighterApp = () => {
         stageBackgrounds,
         mugshots,
         anims,
+        extraAnims,
       },
       onComplete: (initialState) => {
         if (initialState === 'ONLINE_NAME') isOnlineHostRef.current = false;
@@ -471,6 +476,7 @@ const FighterApp = () => {
       towerBackground,
       stageBackgrounds,
       anims,
+      extraAnims,
       setGameState,
       setSelectedChar,
       setCpuChar,
