@@ -220,39 +220,65 @@ export function drawMainMenu(ctx: CanvasRenderingContext2D, context: GameLoopCon
 }
 
 import { STORY_TOWER_ORDER } from '../constants';
+import { VICTORY_CREDITS } from '../creditsContent';
 
-const STORY_TRANSITION_TEXT = 'Defontana ha clonado a los Maxxitos\nVence a los clones para salvar a Maxxa';
+const STORY_TRANSITION_PART1 = 'Defontana ha clonado a los Maxxitos';
+const STORY_TRANSITION_PART2 = 'Vence a los clones para salvar a Maxxa';
+const STORY_TRANSITION_DELAY = 18;
+const STORY_TRANSITION_LETTER_INTERVAL = 3;
+const STORY_TRANSITION_HOLD_PART1 = 50;
+const STORY_TRANSITION_BLACK_FRAMES = 55;
+const STORY_TRANSITION_HOLD_PART2 = 70;
 
 export function drawStoryTransition(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, context.CANVAS_WIDTH, context.CANVAS_HEIGHT);
+
   const frame = context.frameCounter.current;
-  const delayFrames = 18;
-  const lettersShown = Math.min(STORY_TRANSITION_TEXT.length, Math.max(0, Math.floor((frame - delayFrames) / 3)));
-  const prevCount = context.storyTransitionLetterCountRef.current;
-  if (lettersShown > prevCount) {
-    for (let i = prevCount; i < lettersShown; i++) {
-      if (STORY_TRANSITION_TEXT[i] !== '\n') sounds.playLetterSound();
+  const part1LetterFrames = STORY_TRANSITION_PART1.length * STORY_TRANSITION_LETTER_INTERVAL;
+  const phase1End = STORY_TRANSITION_DELAY + part1LetterFrames + STORY_TRANSITION_HOLD_PART1;
+  const phase2End = phase1End + STORY_TRANSITION_BLACK_FRAMES;
+
+  let phase: 1 | 2 | 3 = 1;
+  if (frame >= phase2End) phase = 3;
+  else if (frame >= phase1End) phase = 2;
+
+  if (phase === 1) {
+    const lettersShown = Math.min(STORY_TRANSITION_PART1.length, Math.max(0, Math.floor((frame - STORY_TRANSITION_DELAY) / STORY_TRANSITION_LETTER_INTERVAL)));
+    const prevCount = context.storyTransitionLetterCountRef.current;
+    if (lettersShown > prevCount) {
+      for (let i = prevCount; i < lettersShown; i++) sounds.playLetterSound();
+      context.storyTransitionLetterCountRef.current = lettersShown;
     }
-    context.storyTransitionLetterCountRef.current = lettersShown;
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(STORY_TRANSITION_PART1.slice(0, lettersShown), context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2);
+  } else if (phase === 2) {
+    // Pantalla negra entre las dos frases
+  } else {
+    const t = frame - phase2End;
+    if (t === 0) context.storyTransitionLetterCountRef.current = 0;
+    const lettersShown = Math.min(STORY_TRANSITION_PART2.length, Math.max(0, Math.floor(t / STORY_TRANSITION_LETTER_INTERVAL)));
+    const prevCount = context.storyTransitionLetterCountRef.current;
+    if (lettersShown > prevCount) {
+      for (let i = prevCount; i < lettersShown; i++) sounds.playLetterSound();
+      context.storyTransitionLetterCountRef.current = lettersShown;
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(STORY_TRANSITION_PART2.slice(0, lettersShown), context.CANVAS_WIDTH / 2, context.CANVAS_HEIGHT / 2);
+
+    if (lettersShown >= STORY_TRANSITION_PART2.length && t > STORY_TRANSITION_PART2.length * STORY_TRANSITION_LETTER_INTERVAL + STORY_TRANSITION_HOLD_PART2) {
+      context.storyTowerAnimOffsetYRef.current = 999;
+      context.setGameState('STORY_TOWER');
+    }
   }
-  ctx.fillStyle = '#fff';
-  ctx.font = '14px "Press Start 2P"';
-  ctx.textAlign = 'center';
-  const visibleText = STORY_TRANSITION_TEXT.slice(0, lettersShown);
-  const lines = visibleText.split('\n');
-  const lineHeight = 22;
-  const cy = context.CANVAS_HEIGHT / 2;
-  const startY = cy - (lines.length - 1) * (lineHeight / 2);
-  lines.forEach((line, i) => {
-    ctx.fillText(line, context.CANVAS_WIDTH / 2, startY + i * lineHeight);
-  });
+
   context.frameCounter.current++;
-  const holdFrames = 70;
-  if (lettersShown >= STORY_TRANSITION_TEXT.length && frame > delayFrames + STORY_TRANSITION_TEXT.length * 3 + holdFrames) {
-    context.storyTowerAnimOffsetYRef.current = 999;
-    context.setGameState('STORY_TOWER');
-  }
 }
 
 const TOWER_SLOT_HEIGHT = 170;
@@ -1185,29 +1211,6 @@ export function drawStoryGameOver(ctx: CanvasRenderingContext2D, context: GameLo
   }
 }
 
-const VICTORY_CREDITS: { type: 'title' | 'subtitle' | 'line'; text: string }[] = [
-  { type: 'title', text: 'VICTORIA' },
-  { type: 'subtitle', text: 'Has salvado a Maxxa' },
-  { type: 'line', text: '' },
-  { type: 'subtitle', text: 'LA MAXXA VELADA' },
-  { type: 'line', text: '' },
-  { type: 'line', text: 'Direccion' },
-  { type: 'line', text: 'Nombre del director' },
-  { type: 'line', text: '' },
-  { type: 'line', text: 'Arte y diseno' },
-  { type: 'line', text: 'Nombre artista' },
-  { type: 'line', text: '' },
-  { type: 'line', text: 'Programacion' },
-  { type: 'line', text: 'Nombre programador' },
-  { type: 'line', text: '' },
-  { type: 'line', text: 'Musica y sonido' },
-  { type: 'line', text: 'Nombre musico' },
-  { type: 'line', text: '' },
-  { type: 'line', text: 'Gracias por jugar' },
-  { type: 'line', text: '' },
-  { type: 'line', text: 'SPACE/ENTER - Volver al menu' },
-];
-
 const VICTORY_LINE_HEIGHT = 28;
 const VICTORY_SCROLL_SPEED = 0.65;
 const VICTORY_TRANSFORMATION_KEY = 'bruno_bachatin/transformation';
@@ -1217,8 +1220,8 @@ const VICTORY_SPRITE_W = 200;
 const VICTORY_SPRITE_H = 200;
 const VICTORY_SPRITE_X = 24;
 const VICTORY_SPRITE_Y_OFFSET = 18; // ajuste vertical de la animación
-const VICTORY_SPRITE_FRAME_STEP = 2;
-const VICTORY_TRANSFORMATION_ANIM_FRAMES = 36; // transformation se ejecuta 1 vez (36 frames)
+const VICTORY_ANIM_FRAME_COUNT = 36;
+const VICTORY_ANIM_LOOP_GAME_FRAMES = 120; // 2 segundos a 60fps para los 36 frames (18 fps)
 
 export function drawStoryVictory(ctx: CanvasRenderingContext2D, context: GameLoopContext): void {
   ctx.fillStyle = '#000';
@@ -1231,15 +1234,14 @@ export function drawStoryVictory(ctx: CanvasRenderingContext2D, context: GameLoo
 
   if (frame >= VICTORY_DELAY_FRAMES) {
     const t = frame - VICTORY_DELAY_FRAMES;
-    const transformationGameFrames = VICTORY_TRANSFORMATION_ANIM_FRAMES * VICTORY_SPRITE_FRAME_STEP;
 
-    if (t < transformationGameFrames && transformationFrames?.length) {
-      const animFrameIndex = Math.min(Math.floor(t / VICTORY_SPRITE_FRAME_STEP), transformationFrames.length - 1);
+    if (t < VICTORY_ANIM_LOOP_GAME_FRAMES && transformationFrames?.length) {
+      const animFrameIndex = Math.min(Math.floor((t / VICTORY_ANIM_LOOP_GAME_FRAMES) * VICTORY_ANIM_FRAME_COUNT), transformationFrames.length - 1);
       const fadeAlpha = Math.min(1, t / 20);
       drawExtraAnimFrame(ctx, transformationFrames, animFrameIndex, VICTORY_SPRITE_X, spriteY, VICTORY_SPRITE_W, VICTORY_SPRITE_H, fadeAlpha);
     } else if (danceFrames?.length) {
-      const danceT = t - transformationGameFrames;
-      const animFrameIndex = Math.floor(danceT / VICTORY_SPRITE_FRAME_STEP) % danceFrames.length;
+      const danceT = t - VICTORY_ANIM_LOOP_GAME_FRAMES;
+      const animFrameIndex = Math.floor((danceT / VICTORY_ANIM_LOOP_GAME_FRAMES) * VICTORY_ANIM_FRAME_COUNT) % danceFrames.length;
       drawExtraAnimFrame(ctx, danceFrames, animFrameIndex, VICTORY_SPRITE_X, spriteY, VICTORY_SPRITE_W, VICTORY_SPRITE_H, 1);
     }
   }

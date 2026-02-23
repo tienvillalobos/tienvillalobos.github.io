@@ -193,7 +193,11 @@ const FighterApp = () => {
       },
       onComplete: (initialState) => {
         if (initialState === 'ONLINE_NAME') isOnlineHostRef.current = false;
-        setGameState(initialState);
+        if (typeof window !== 'undefined' && window.location.pathname === '/credits') {
+          setGameState('STORY_VICTORY');
+        } else {
+          setGameState(initialState);
+        }
       },
     });
   };
